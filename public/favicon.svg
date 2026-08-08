@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">근태관리</title>
+  <desc id="description">시계를 형상화한 근태관리 앱 아이콘</desc>
+  <rect width="512" height="512" rx="112" fill="#fffefa"/>
+  <circle cx="256" cy="256" r="150" fill="none" stroke="#173f35" stroke-width="42"/>
+  <path d="M256 160v104l72 44" fill="none" stroke="#173f35" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="256" cy="256" r="20" fill="#d7e86b"/>
+</svg>
