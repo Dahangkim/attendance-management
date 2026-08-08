@@ -289,7 +289,7 @@ test("public distribution keeps the maintainer contact visible and configurable"
   assert.match(owner, /NEXT_PUBLIC_APP_OWNER_NAME/);
   assert.match(owner, /NEXT_PUBLIC_SUPPORT_EMAIL/);
   assert.match(env, /NEXT_PUBLIC_SUPPORT_EMAIL=indigoblau1223@gmail\.com/);
-  assert.match(app, /mailto:\\$\\{applicationOwner\\.supportEmail\\}/);
+  assert.match(app, /mailto:\$\{applicationOwner\.supportEmail\}/);
   assert.doesNotMatch(app, />수정 요청 메일 보내기</);
   assert.doesNotMatch(app, /수정 요청 이메일은 배포 설정에서 등록합니다/);
   assert.match(app, /readableTextColor/);
@@ -472,4 +472,13 @@ test("employee number login accepts existing short passwords and case-insensitiv
   assert.match(route, /toSupabasePassword\(password\)/);
   assert.match(password, /password\.length >= 4 && password\.length < 6/);
   assert.doesNotMatch(route, /!profiles\[0\]\.email/);
+});
+
+test("secure clock uses global holidays and keeps generated PC diagnostics out of notes", async () => {
+  const sql = await readFile(new URL("supabase/upgrade_secure_clock_and_overnight.sql", root), "utf8");
+  assert.match(sql, /public\.holidays where holiday_date = v_work_date/);
+  assert.doesNotMatch(sql, /public\.holidays where org_id = v_user\.org_id/);
+  assert.match(sql, /사무실 PC에서 기록, 위치 측정 오차/);
+  assert.match(sql, /v_record_note/);
+  assert.match(sql, /update public\.attendance_records\s+set note = trim\(regexp_replace/);
 });
