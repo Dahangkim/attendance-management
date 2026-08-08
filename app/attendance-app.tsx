@@ -410,7 +410,10 @@ function BrandIdentity({ branding, login = false }: { branding: OrganizationBran
 }
 
 function SupportContact({ compact = false }: { compact?: boolean }) {
-  return <div className={compact ? "support-contact compact" : "support-contact"}><strong>앱 운영 책임자 {applicationOwner.name}</strong>{applicationOwner.supportEmail && <a href={`mailto:${applicationOwner.supportEmail}?subject=${encodeURIComponent("근태관리 앱 수정 요청")}`}>수정 요청 메일 보내기</a>}</div>;
+  const ownerName = applicationOwner.supportEmail
+    ? <a href={`mailto:${applicationOwner.supportEmail}?subject=${encodeURIComponent("근태관리 앱 수정 요청")}`}>{applicationOwner.name}</a>
+    : applicationOwner.name;
+  return <div className={compact ? "support-contact compact" : "support-contact"}><strong>앱 운영 책임자 {ownerName}</strong></div>;
 }
 
 function AppLoadingScreen({ branding }: { branding: OrganizationBranding }) {
