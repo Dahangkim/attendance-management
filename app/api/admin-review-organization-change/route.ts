@@ -1,6 +1,7 @@
 import { runtimeEnv } from "../_lib/runtime-env";
 import { authenticatedAdmin } from "../_lib/admin-auth";
 import { createServerSupabaseClient } from "../_lib/server-supabase";
+import { toSupabasePassword } from "../../../lib/auth-password";
 
 export const dynamic = "force-dynamic";
 const json = (body: Record<string, unknown>, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -42,12 +43,12 @@ export async function POST(request: Request) {
       } else if (change.action === "replace") {
         const name = typeof values.name === "string" ? values.name.trim() : "";
         const employeeNumber = typeof values.employee_number === "string" ? values.employee_number.trim().toUpperCase() : "";
-        if (name.length < 2 || !/^[A-Z0-9-]{2,24}$/.test(employeeNumber) || temporaryPassword.length < 8) return json({ ok: false, code: "TEMPORARY_PASSWORD_REQUIRED" }, 400);
+        if (name.length < 2 || !/^[A-Z0-9-]{2,24}$/.test(employeeNumber) || temporaryPassword.length < 4) return json({ ok: false, code: "TEMPORARY_PASSWORD_REQUIRED" }, 400);
         const { data: duplicateNumber } = await client.from("profiles").select("id").ilike("employee_number", employeeNumber).neq("id", change.target_profile_id || "00000000-0000-0000-0000-000000000000").limit(1).maybeSingle();
         if (duplicateNumber) return json({ ok: false, code: "EMPLOYEE_NUMBER_EXISTS" }, 409);
         const { data: organization } = await client.from("organizations").select("org_code").eq("id", change.org_id).single();
         const email = `org-admin-${String(organization?.org_code || "organization").toLowerCase().replace(/[^a-z0-9-]/g, "-")}-${employeeNumber.toLowerCase()}@attendance.invalid`;
-        const { data: created, error: authError } = await client.auth.admin.createUser({ email, password: temporaryPassword, email_confirm: true, user_metadata: { name, employee_number: employeeNumber, department: "기관관리", org_code: organization?.org_code } });
+        const { data: created, error: authError } = await client.auth.admin.createUser({ email, password: toSupabasePassword(temporaryPassword), email_confirm: true, user_metadata: { name, employee_number: employeeNumber, department: "기관관리", org_code: organization?.org_code } });
         if (authError || !created.user) return json({ ok: false, code: "CHANGE_APPLY_FAILED" }, 500);
         const { error: profileError } = await client.from("profiles").upsert({ id: created.user.id, email, name, employee_number: employeeNumber, department: "기관관리", org_id: change.org_id, role: "org_admin", is_active: true, can_view_reports: true });
         if (profileError) { await client.auth.admin.deleteUser(created.user.id); return json({ ok: false, code: "CHANGE_APPLY_FAILED" }, 500); }

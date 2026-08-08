@@ -1,6 +1,7 @@
 import { runtimeEnv } from "../_lib/runtime-env";
 import { authenticatedAdmin } from "../_lib/admin-auth";
 import { createServerSupabaseClient } from "../_lib/server-supabase";
+import { toSupabasePassword } from "../../../lib/auth-password";
 
 export const dynamic = "force-dynamic";
 const json = (body: Record<string, unknown>, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
   if (duplicateNumber) return json({ ok: false, code: "EMPLOYEE_NUMBER_EXISTS" }, 409);
   const email = requestedEmail || `org-admin-${organization.org_code.toLowerCase().replace(/[^a-z0-9-]/g, "-")}-${employeeNumber.toLowerCase()}@attendance.invalid`;
   const { data: created, error: createError } = await client.auth.admin.createUser({
-    email, password, email_confirm: true,
+    email, password: toSupabasePassword(password), email_confirm: true,
     user_metadata: { name, employee_number: employeeNumber, department: "기관관리", org_code: organization.org_code },
   });
   if (createError || !created.user) return json({ ok: false, code: "ORG_ADMIN_CREATE_FAILED" }, 409);

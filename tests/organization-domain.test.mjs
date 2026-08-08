@@ -465,7 +465,10 @@ test("organization administrators review overtime only inside their organization
 
 test("employee number login accepts existing short passwords and case-insensitive numbers", async () => {
   const route = await readFile(new URL("app/api/employee-login/route.ts", root), "utf8");
+  const password = await readFile(new URL("lib/auth-password.ts", root), "utf8");
   assert.match(route, /password\.length < 1/);
   assert.match(route, /\.ilike\("employee_number", employeeNumber\)/);
+  assert.match(route, /toSupabasePassword\(password\)/);
+  assert.match(password, /password\.length >= 4 && password\.length < 6/);
   assert.doesNotMatch(route, /!profiles\[0\]\.email/);
 });

@@ -13,6 +13,7 @@ import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { deploymentBrandingSource } from "../lib/deployment-branding";
 import { DEFAULT_ACCENT_COLOR, DEFAULT_PRIMARY_COLOR, organizationBranding, type OrganizationBranding, type OrganizationBrandingSource } from "../lib/organization-branding";
 import { applicationOwner } from "../lib/application-owner";
+import { toSupabasePassword } from "../lib/auth-password";
 import {
   LOCATION_LABEL, STATUS_LABEL, type AttendanceException, type AttendanceRecord,
   type AnnualLeaveBalance, type AuditLog, type CompTimeBalance, type CompTimeCredit, type CorrectionRequest, type EmployeeShiftAssignment, type Holiday, type MonthlyOvertimeAfterComp, type Organization, type OrganizationChangeRequest, type OrganizationSettings, type OrganizationWorkPolicy, type Profile,
@@ -29,6 +30,13 @@ type Notice = { tone: "success" | "warning" | "error" | "info"; text: string } |
 type MonthClosing = { year: number; month: number; status: "open" | "closed"; closed_at: string | null; reopened_at: string | null; reopen_reason: string };
 
 const KST_DATE = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" });
+async function signInWithCompatiblePassword(client: NonNullable<typeof supabase>, email: string, password: string) {
+  const storedPassword = toSupabasePassword(password);
+  const result = await client.auth.signInWithPassword({ email, password: storedPassword });
+  return result.error && storedPassword !== password
+    ? client.auth.signInWithPassword({ email, password })
+    : result;
+}
 const formatDate = (value: string | Date) => new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "numeric", day: "numeric", weekday: "short" }).format(new Date(value));
 const formatTime = (value: string | null) => value ? new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value)) : "미기록";
 const formatTimeInput = (value: string | null) => value ? new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value)) : "";
@@ -1201,7 +1209,7 @@ export default function AttendanceApp() {
       const { error } = await supabase.auth.setSession(result.session);
       if (error) setLoginError("로그인 정보를 연결하지 못했습니다. 다시 시도해 주세요.");
     } else {
-      const { error } = await supabase.auth.signInWithPassword({ email: identifier, password: loginPassword });
+      const { error } = await signInWithCompatiblePassword(supabase, identifier, loginPassword);
       if (error) setLoginError("이메일 또는 비밀번호를 확인해 주세요.");
     }
     setBusy(false);
@@ -1223,14 +1231,14 @@ export default function AttendanceApp() {
     if (newPassword !== confirmPassword) { setNotice({ tone: "warning", text: "새 비밀번호 확인이 일치하지 않습니다." }); return; }
     setBusy(true);
     if (!passwordRecovery) {
-      const { error: verifyError } = await supabase.auth.signInWithPassword({ email: currentProfile.email, password: currentPassword });
+      const { error: verifyError } = await signInWithCompatiblePassword(supabase, currentProfile.email, currentPassword);
       if (verifyError) {
         setBusy(false);
         setNotice({ tone: "error", text: "현재 비밀번호가 맞지 않습니다." });
         return;
       }
     }
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    const { error } = await supabase.auth.updateUser({ password: toSupabasePassword(newPassword) });
     setBusy(false);
     if (error) {
       const weakPassword = "code" in error && error.code === "weak_password";
@@ -1252,7 +1260,7 @@ export default function AttendanceApp() {
     if (newPassword.length < 4) { setNotice({ tone: "warning", text: "직원 임시 비밀번호는 4자 이상 입력해 주세요." }); return; }
     if (newPassword !== confirmPassword) { setNotice({ tone: "warning", text: "임시 비밀번호 확인이 일치하지 않습니다." }); return; }
     setBusy(true);
-    const { error: verifyError } = await supabase.auth.signInWithPassword({ email: currentProfile.email, password: adminPassword });
+    const { error: verifyError } = await signInWithCompatiblePassword(supabase, currentProfile.email, adminPassword);
     if (verifyError) {
       setBusy(false);
       setNotice({ tone: "error", text: "관리자 비밀번호가 맞지 않습니다." });
@@ -1288,7 +1296,7 @@ export default function AttendanceApp() {
     const confirmPassword = String(data.get("confirm_password") || "");
     if (password.length < 4 || password !== confirmPassword) { setNotice({ tone: "warning", text: "임시 비밀번호는 4자 이상이며 확인값과 같아야 합니다." }); return; }
     setBusy(true);
-    const { error: verifyError } = await supabase.auth.signInWithPassword({ email: currentProfile.email, password: adminPassword });
+    const { error: verifyError } = await signInWithCompatiblePassword(supabase, currentProfile.email, adminPassword);
     if (verifyError) { setBusy(false); setNotice({ tone: "error", text: "관리자 비밀번호가 맞지 않습니다." }); return; }
     const { data: sessionData } = await supabase.auth.getSession();
     const response = await fetch("/api/admin-create-employee", {

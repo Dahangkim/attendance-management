@@ -1,5 +1,6 @@
 import { runtimeEnv } from "../_lib/runtime-env";
 import { createServerSupabaseClient } from "../_lib/server-supabase";
+import { toSupabasePassword } from "../../../lib/auth-password";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
   const email = `${organization.org_code}.${employeeNumber.toLowerCase()}@attendance.invalid`;
   const { data: created, error: createError } = await adminClient.auth.admin.createUser({
     email,
-    password,
+    password: toSupabasePassword(password),
     email_confirm: true,
     user_metadata: { name, employee_number: employeeNumber, department, org_code: organization.org_code },
   });

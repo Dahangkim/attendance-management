@@ -1,5 +1,6 @@
 import { runtimeEnv } from "../_lib/runtime-env";
 import { createServerSupabaseClient } from "../_lib/server-supabase";
+import { toSupabasePassword } from "../../../lib/auth-password";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
   if (!target?.is_active || target.role !== "employee") return json({ ok: false, code: "EMPLOYEE_NOT_FOUND" }, 404);
   if (!actor.org_id || target.org_id !== actor.org_id) return json({ ok: false, code: "ORG_MISMATCH" }, 403);
 
-  const { error: updateError } = await adminClient.auth.admin.updateUserById(userId, { password });
+  const { error: updateError } = await adminClient.auth.admin.updateUserById(userId, { password: toSupabasePassword(password) });
   if (updateError) return json({ ok: false, code: "PASSWORD_UPDATE_FAILED" }, 500);
 
   const { error: auditError } = await adminClient.from("attendance_audit_logs").insert({

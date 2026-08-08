@@ -1,6 +1,7 @@
 import { runtimeEnv } from "../_lib/runtime-env";
 import { authenticatedAdmin } from "../_lib/admin-auth";
 import { createServerSupabaseClient } from "../_lib/server-supabase";
+import { toSupabasePassword } from "../../../lib/auth-password";
 
 export const dynamic = "force-dynamic";
 const json = (body: Record<string, unknown>, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -36,7 +37,7 @@ export async function PATCH(request: Request) {
   if (authReadError || !authTarget.user) return json({ ok: false, code: "AUTH_ACCOUNT_NOT_FOUND" }, 404);
   const authChanges = {
     user_metadata: { ...authTarget.user.user_metadata, name, employee_number: employeeNumber, department },
-    ...(password ? { password } : {}),
+    ...(password ? { password: toSupabasePassword(password) } : {}),
   };
   const { error: authUpdateError } = await client.auth.admin.updateUserById(userId, authChanges);
   if (authUpdateError) return json({ ok: false, code: password ? "AUTH_PASSWORD_UPDATE_FAILED" : "AUTH_ACCOUNT_UPDATE_FAILED" }, 409);

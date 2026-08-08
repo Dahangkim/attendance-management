@@ -45,7 +45,7 @@ test("signed-in users can change their own password", async () => {
   const route = await read("app/api/admin-reset-password/route.ts");
   assert.ok(app.includes("PasswordChangeModal"));
   assert.ok(app.includes("현재 비밀번호"));
-  assert.ok(app.includes("supabase.auth.updateUser({ password: newPassword })"));
+  assert.ok(app.includes("supabase.auth.updateUser({ password: toSupabasePassword(newPassword) })"));
   assert.ok(app.includes('event === "PASSWORD_RECOVERY"'));
   assert.ok(app.includes("newPassword.length < 4"));
   assert.ok(app.includes("minLength={4}"));
@@ -124,7 +124,7 @@ test("employee number changes can include a known temporary login password", asy
   assert.ok(app.includes("새 임시 비밀번호, 선택"));
   assert.ok(app.includes("employeeNumber, department:"));
   assert.ok(app.includes("password }"));
-  assert.ok(route.includes("...(password ? { password } : {})"));
+  assert.ok(route.includes("...(password ? { password: toSupabasePassword(password) } : {})"));
   assert.ok(route.includes('password ? "AUTH_PASSWORD_UPDATE_FAILED"'));
   assert.ok(route.includes("passwordChanged: Boolean(password)"));
 });

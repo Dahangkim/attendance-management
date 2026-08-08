@@ -1,5 +1,6 @@
 import { runtimeEnv } from "../_lib/runtime-env";
 import { createServerSupabaseClient } from "../_lib/server-supabase";
+import { toSupabasePassword } from "../../../lib/auth-password";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,11 @@ export async function POST(request: Request) {
   const authEmail = authUserData.user?.email;
   if (authUserError || !authEmail) return json({ ok: false, code: "INVALID_CREDENTIALS" }, 401);
   const authClient = createServerSupabaseClient(supabaseUrl, publishableKey);
-  const { data: authData, error: authError } = await authClient.auth.signInWithPassword({ email: authEmail, password });
+  const storedPassword = toSupabasePassword(password);
+  let { data: authData, error: authError } = await authClient.auth.signInWithPassword({ email: authEmail, password: storedPassword });
+  if (authError && storedPassword !== password) {
+    ({ data: authData, error: authError } = await authClient.auth.signInWithPassword({ email: authEmail, password }));
+  }
   if (authError || !authData.session || authData.user.id !== profile.id) return json({ ok: false, code: "INVALID_CREDENTIALS" }, 401);
 
   return json({

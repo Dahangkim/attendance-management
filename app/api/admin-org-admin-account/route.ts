@@ -1,6 +1,7 @@
 import { runtimeEnv } from "../_lib/runtime-env";
 import { authenticatedAdmin } from "../_lib/admin-auth";
 import { createServerSupabaseClient } from "../_lib/server-supabase";
+import { toSupabasePassword } from "../../../lib/auth-password";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +63,7 @@ export async function PATCH(request: Request) {
     }
   }
   if (password) {
-    const { error: authPasswordError } = await client.auth.admin.updateUserById(userId, { password });
+    const { error: authPasswordError } = await client.auth.admin.updateUserById(userId, { password: toSupabasePassword(password) });
     if (authPasswordError) {
       return json({ ok: false, code: /password/i.test(authPasswordError.message) ? "INVALID_PASSWORD" : "AUTH_PASSWORD_UPDATE_FAILED", authCode: authPasswordError.code || null }, 409);
     }
