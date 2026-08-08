@@ -61,7 +61,7 @@ test("password results stay visible as a fixed seven-second notice", async () =>
   assert.ok(css.includes("z-index: 1200"));
 });
 
-test("mobile and PC sessions persist and expired sessions return to login", async () => {
+test("installed app sessions persist and expired sessions return to login", async () => {
   const app = await read("app/attendance-app.tsx");
   const client = await read("lib/supabase.ts");
   const readme = await read("README.md");
@@ -73,7 +73,9 @@ test("mobile and PC sessions persist and expired sessions return to login", asyn
   assert.ok(app.includes("로그인은 유지 중이지만 직원 정보를 불러오지 못했습니다"));
   assert.ok(!app.includes("signOutForInactivity"));
   assert.ok(!app.includes("PC_IDLE_TIMEOUT_MS"));
-  assert.ok(readme.includes("휴대전화와 개인 PC 모두"));
+  assert.ok(readme.includes("일반 브라우저에서는 새로고침하는 동안에만"));
+  assert.ok(readme.includes("브라우저 창을 완전히 닫았다가 다시 열면 다시 로그인"));
+  assert.ok(readme.includes("휴대전화 홈 화면에 설치한 앱에서는"));
   assert.ok(readme.includes("세션이 실제로 만료되거나 로그아웃되면"));
 });
 
