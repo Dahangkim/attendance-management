@@ -3662,6 +3662,16 @@ begin;
 
 -- 브라우저가 사무실 IP를 임의로 전달하지 못하도록 출퇴근 저장은 서버 전용 함수로 제한합니다.
 -- GPS 좌표는 기기에서 전달되므로 관리자 확인 절차를 계속 유지합니다.
+-- PC의 자동 위치 오차 문구는 위치 이력과 감사 로그로 확인할 수 있으므로 일반 비고에서는 제거합니다.
+update public.attendance_records
+set note = trim(regexp_replace(
+  note,
+  '(^|\n)사무실 PC에서 기록, 위치 측정 오차 [^\n]*',
+  '',
+  'g'
+))
+where note like '%사무실 PC에서 기록, 위치 측정 오차%';
+
 create or replace function public.clock_attendance_server(
   p_employee_id uuid,
   p_action text,
@@ -3692,6 +3702,7 @@ declare
   v_is_regular_workday boolean;
   v_raw_overtime integer := 0;
   v_recorded_overtime integer := 0;
+  v_record_note text;
 begin
   if p_action not in ('clock_in','clock_out') then raise exception 'INVALID_ACTION'; end if;
   if p_employee_id is null then raise exception 'AUTH_REQUIRED'; end if;
@@ -3722,6 +3733,10 @@ begin
   if v_location_status <> 'inside' and char_length(trim(coalesce(p_note,''))) < 2 then
     raise exception 'LOCATION_REASON_REQUIRED';
   end if;
+  v_record_note := case
+    when coalesce(p_note, '') like '사무실 PC에서 기록, 위치 측정 오차 %' then ''
+    else coalesce(p_note, '')
+  end;
 
   if p_action = 'clock_out' then
     select * into v_record
@@ -3774,7 +3789,7 @@ begin
     ) values (
       p_employee_id, v_work_date, 'office', v_now, p_accuracy, v_distance,
       v_location_status, nullif(trim(p_ip_address), ''), v_ip_matched, v_attendance_status,
-      coalesce(p_note,''), 0, 0, 'none', 0, 'none'
+      v_record_note, 0, 0, 'none', 0, 'none'
     )
     on conflict (employee_id, work_date) do update set
       work_type = 'office', clock_in_at = excluded.clock_in_at,
@@ -3814,7 +3829,7 @@ begin
       overtime_status = case when v_recorded_overtime > 0 then 'pending' else 'none' end,
       approved_overtime_minutes = 0,
       comp_time_eligible_minutes = 0,
-      note = trim(concat_ws(E'\n', nullif(note,''), nullif(coalesce(p_note,''),'')))
+      note = trim(concat_ws(E'\n', nullif(note,''), nullif(v_record_note,'')))
     where id = v_record.id
     returning * into v_record;
   end if;
