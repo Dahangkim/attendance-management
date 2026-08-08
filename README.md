@@ -239,6 +239,10 @@ where email = 'staff@example.org';
 
 이 프로젝트는 MIT License로 배포합니다. 각 기관은 코드를 복제하고 수정해 사용할 수 있으며, 실제 운영자료와 비밀값은 각 기관의 별도 Supabase와 배포 환경에 보관해야 합니다.
 
+## 수정 요청
+
+앱 운영 책임자는 김수현입니다. 오류 제보와 수정 요청은 [indigoblau1223@gmail.com](mailto:indigoblau1223@gmail.com)으로 보내 주세요.
+
 ## 데이터 백업
 
 1. Supabase 프로젝트의 자동 백업 제공 범위와 복구 가능 기간을 요금제에서 확인합니다.

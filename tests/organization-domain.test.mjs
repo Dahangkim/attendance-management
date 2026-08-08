@@ -282,13 +282,13 @@ test("work policy repair is safe to reapply without changing attendance history"
   assert.doesNotMatch(sql, /delete from public\.attendance_records/);
 });
 
-test("public distribution keeps ownership contact configurable", async () => {
+test("public distribution keeps the maintainer contact visible and configurable", async () => {
   const owner = await readFile(new URL("lib/application-owner.ts", root), "utf8");
   const env = await readFile(new URL(".env.example", root), "utf8");
   const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
   assert.match(owner, /NEXT_PUBLIC_APP_OWNER_NAME/);
   assert.match(owner, /NEXT_PUBLIC_SUPPORT_EMAIL/);
-  assert.match(env, /NEXT_PUBLIC_SUPPORT_EMAIL=YOUR_SUPPORT_EMAIL/);
+  assert.match(env, /NEXT_PUBLIC_SUPPORT_EMAIL=indigoblau1223@gmail\.com/);
   assert.match(app, /수정 요청 메일 보내기/);
   assert.doesNotMatch(app, /수정 요청 이메일은 배포 설정에서 등록합니다/);
   assert.match(app, /readableTextColor/);
