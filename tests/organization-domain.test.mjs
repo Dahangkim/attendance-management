@@ -559,8 +559,10 @@ test("only public developer support is exposed and institution support stays off
   const login = await readFile(new URL("app/api/employee-login/route.ts", root), "utf8");
   assert.match(owner, /NEXT_PUBLIC_MAINTAINER_EMAIL/);
   assert.match(app, /이름, 사번, 근태기록 등 개인정보를 보내지 마세요/);
-  assert.match(app, /근태와 계정 문의는 소속 기관 관리자에게 문의하세요/);
-  assert.match(app, /isAdminRole\(effectiveRole\) && <SupportContact compact \/>/);
+  assert.match(app, /근태기록, 신청, 로그인과 계정 문의는 소속 기관 관리자에게 문의하세요/);
+  assert.match(app, /isAdminRole\(effectiveRole\) \? <SupportContact compact \/> : <InstitutionSupportNotice compact \/>/);
+  assert.match(app, /8자 이상으로 영문, 숫자, 특수문자를 각각 1개 이상 포함/);
+  assert.match(app, /6자 이상으로 설정해 주세요/);
   assert.doesNotMatch(app, /support_email|supportEmail/);
   assert.doesNotMatch(context, /support_email/);
   assert.doesNotMatch(login, /support_email/);
