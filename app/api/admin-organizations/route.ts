@@ -103,10 +103,9 @@ export async function PATCH(request: Request) {
   const brandSubtitle = typeof body?.brandSubtitle === "string" ? body.brandSubtitle.trim() : "";
   const brandMark = typeof body?.brandMark === "string" ? body.brandMark.trim().slice(0, 2) : "";
   const brandLogoUrl = typeof body?.brandLogoUrl === "string" ? body.brandLogoUrl.trim() : "";
-  const supportEmail = typeof body?.supportEmail === "string" ? body.supportEmail.trim().toLowerCase() : "";
   const isActive = typeof body?.isActive === "boolean" ? body.isActive : undefined;
   const validAssetUrl = !brandLogoUrl || brandLogoUrl.startsWith("/") || /^https:\/\//i.test(brandLogoUrl);
-  if (!orgId || (brandPrimaryColor && !/^#[0-9a-f]{6}$/i.test(brandPrimaryColor)) || (brandAccentColor && !/^#[0-9a-f]{6}$/i.test(brandAccentColor)) || !validAssetUrl || (supportEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(supportEmail))) {
+  if (!orgId || (brandPrimaryColor && !/^#[0-9a-f]{6}$/i.test(brandPrimaryColor)) || (brandAccentColor && !/^#[0-9a-f]{6}$/i.test(brandAccentColor)) || !validAssetUrl) {
     return json({ ok: false, code: "INVALID_INPUT" }, 400);
   }
   if (!brandingOnly && (actor.role !== "super_admin" || orgName.length < 2 || orgName.length > 100 || shortName.length < 1 || shortName.length > 50)) {
@@ -120,7 +119,6 @@ export async function PATCH(request: Request) {
   if (Object.hasOwn(body || {}, "brandLogoUrl")) updates.brand_logo_url = brandLogoUrl || null;
   if (Object.hasOwn(body || {}, "brandPrimaryColor")) updates.brand_primary_color = brandPrimaryColor || null;
   if (Object.hasOwn(body || {}, "brandAccentColor")) updates.brand_accent_color = brandAccentColor || null;
-  if (Object.hasOwn(body || {}, "supportEmail")) updates.support_email = supportEmail || null;
   if (!brandingOnly) {
     updates.org_name = orgName;
     updates.short_name = shortName;

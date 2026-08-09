@@ -45,12 +45,11 @@
 - 프론트엔드에는 Supabase 서비스 역할 키를 사용하지 않습니다.
 - 사업장 좌표, 허용 반경과 사무실 IP는 기관관리자가 변경 요청을 제출하고 최고관리자가 승인한 뒤에만 반영됩니다.
 
-## 문의 연락처 구분
+## 프로그램 기술지원
 
 - 프로그램 기술지원과 오류 제보는 `NEXT_PUBLIC_MAINTAINER_EMAIL`에 설정한 개발자 연락처로 보냅니다.
 - 직원 이름, 사번, 출퇴근 기록, 계정정보 등 개인정보와 기관 내부 자료를 개발자에게 보내면 안 됩니다.
-- 근태, 계정과 기록 관련 문의는 기관 설정의 `기관 내부 문의 이메일`로 안내합니다.
-- 하나의 배포에서 여러 기관을 운영할 수 있으므로 기관 내부 문의 이메일은 전역 환경변수가 아니라 기관별로 저장합니다.
+- 근태, 계정과 기록 관련 문의는 소속 기관 관리자에게 문의합니다.
 
 ## 적용한 기본값
 
@@ -136,7 +135,7 @@ NEXT_PUBLIC_MAINTAINER_EMAIL=developer@example.com
 
 현재 운영 중인 기관 앱을 업데이트할 때는 적용하지 않은 보완 SQL을 파일 생성 순서대로 한 번씩 실행합니다. 이번 다중 직원 등록, 외부교육, 실제 시간외근무와 중간 휴가 계산은 `supabase/upgrade_batch_training_actual_overtime.sql`을 실행해야 사용할 수 있습니다. 출퇴근 서버 검증용 `supabase/upgrade_secure_clock_and_overnight.sql`을 아직 실행하지 않았다면 이 파일을 먼저 적용합니다.
 
-보호 설정 승인 절차와 문의 연락처 분리를 적용할 때는 `supabase/repair_protected_workplace_approval_only.sql`을 먼저 실행하고, 이어서 `supabase/add_organization_support_contact.sql`을 실행합니다. 첫 번째 파일은 기관관리자의 사업장 위치와 사무실 IP 직접 변경을 차단하고, 두 번째 파일은 기관별 내부 문의 이메일을 저장하는 열을 추가합니다.
+보호 설정 승인 절차를 적용할 때는 `supabase/repair_protected_workplace_approval_only.sql`을 실행합니다. 이 파일은 기관관리자의 사업장 위치와 사무실 IP 직접 변경을 차단합니다.
 
 월 마감을 해제했는데도 과거 근태기록을 수정할 수 없다면 `supabase/fix_admin_edit_after_reopen.sql`을 실행합니다. 이 파일은 월 마감 상태와 개별 기록의 마감값을 다시 맞추고 과거 근태상태의 수정 허용값을 보완합니다.
 

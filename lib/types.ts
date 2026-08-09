@@ -19,7 +19,6 @@ export interface Organization {
   brand_primary_color?: string | null;
   brand_accent_color?: string | null;
   brand_og_image_url?: string | null;
-  support_email?: string | null;
 }
 export type WorkType = "office" | "direct_in" | "direct_out" | "field" | "education" | "business_trip" | "remote" | "approved_other";
 export type LocationStatus = "inside" | "outside" | "low_accuracy" | "permission_denied" | "unavailable" | "not_checked";

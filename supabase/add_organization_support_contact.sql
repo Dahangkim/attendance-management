@@ -1,7 +1,3 @@
-begin;
-alter table public.organizations add column if not exists support_email text;
-alter table public.organizations drop constraint if exists organizations_support_email_check;
-alter table public.organizations add constraint organizations_support_email_check
-check (support_email is null or support_email ~* '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$') not valid;
-notify pgrst, 'reload schema';
-commit;
+-- 기관 내부 문의 이메일 기능은 사용하지 않습니다.
+-- 이 파일은 이미 안내된 이력을 보존하기 위해 남겨 두었으며 실행할 SQL은 없습니다.
+select '기관 내부 문의 이메일 기능 사용 안 함' as result;

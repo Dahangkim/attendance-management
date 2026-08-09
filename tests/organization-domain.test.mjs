@@ -552,12 +552,15 @@ test("fresh installs enforce emergency support and protected workplace approval"
   assert.match(repair, /revoke insert, update, delete on public\.organization_settings from authenticated/);
 });
 
-test("developer support and institution support contacts are separated", async () => {
+test("only public developer support is exposed and institution support stays offline", async () => {
   const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
   const owner = await readFile(new URL("lib/application-owner.ts", root), "utf8");
-  const migration = await readFile(new URL("supabase/add_organization_support_contact.sql", root), "utf8");
+  const context = await readFile(new URL("app/api/_lib/organization-context.ts", root), "utf8");
+  const login = await readFile(new URL("app/api/employee-login/route.ts", root), "utf8");
   assert.match(owner, /NEXT_PUBLIC_MAINTAINER_EMAIL/);
   assert.match(app, /이름, 사번, 근태기록 등 개인정보를 보내지 마세요/);
-  assert.match(app, /organization\?\.support_email/);
-  assert.match(migration, /add column if not exists support_email text/);
+  assert.match(app, /근태와 계정 문의는 소속 기관 관리자에게 문의하세요/);
+  assert.doesNotMatch(app, /support_email|supportEmail/);
+  assert.doesNotMatch(context, /support_email/);
+  assert.doesNotMatch(login, /support_email/);
 });

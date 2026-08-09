@@ -413,11 +413,11 @@ function BrandIdentity({ branding, login = false }: { branding: OrganizationBran
   return <div className={`brand${login ? " login-brand" : ""}`}>{branding.logoUrl ? <img className="brand-logo" src={branding.logoUrl} alt="" /> : <div className="brand-mark">{branding.mark}</div>}<div><strong>{branding.title}</strong><span>{branding.subtitle}</span></div></div>;
 }
 
-function SupportContact({ organization, compact = false }: { organization?: TenantOrganization | null; compact?: boolean }) {
+function SupportContact({ compact = false }: { compact?: boolean }) {
   const ownerName = applicationOwner.maintainerEmail
     ? <a href={`mailto:${applicationOwner.maintainerEmail}?subject=${encodeURIComponent("근태관리 프로그램 오류 제보")}`}>{applicationOwner.name}</a>
     : applicationOwner.name;
-  return <div className={compact ? "support-contact compact" : "support-contact"}><strong>프로그램 기술지원 {ownerName}</strong><span>오류와 기능 개선 문의만 받습니다. 이름, 사번, 근태기록 등 개인정보를 보내지 마세요.</span>{organization?.support_email && <a href={`mailto:${organization.support_email}`}>근태와 계정 문의는 기관 담당자에게</a>}</div>;
+  return <div className={compact ? "support-contact compact" : "support-contact"}><strong>프로그램 기술지원 {ownerName}</strong><span>오류와 기능 개선 문의만 받습니다. 이름, 사번, 근태기록 등 개인정보를 보내지 마세요.</span><span>근태와 계정 문의는 소속 기관 관리자에게 문의하세요.</span></div>;
 }
 
 function AppLoadingScreen({ branding }: { branding: OrganizationBranding }) {
@@ -976,7 +976,6 @@ export default function AttendanceApp() {
         brandLogoUrl: String(values.get("brand_logo_url") || ""),
         brandPrimaryColor: String(values.get("brand_primary_color") || ""),
         brandAccentColor: String(values.get("brand_accent_color") || ""),
-        supportEmail: String(values.get("support_email") || ""),
       }),
     }).catch(() => null);
     const result = response ? await response.json().catch(() => ({})) as { organization?: TenantOrganization; code?: string } : {};
@@ -2525,7 +2524,7 @@ export default function AttendanceApp() {
         </nav>
         <div className="privacy-note"><ShieldCheck size={19} /><p><strong>위치는 기록 순간에만 확인합니다.</strong><span>이동경로나 실시간 위치를 추적하지 않습니다.</span></p></div>
         <div className="sidebar-user">{isAdminRole(effectiveRole) && <div className="avatar">{tenantBranding.mark}</div>}<div><strong>{currentProfile?.name}</strong><span>{currentProfile?.department || currentProfile?.employee_number}</span></div>{isSupabaseConfigured && <div className="sidebar-user-actions"><button aria-label="비밀번호 변경" title="비밀번호 변경" onClick={() => { setPasswordRecovery(false); setPasswordOpen(true); }}><KeyRound size={18} /></button><button aria-label="로그아웃" title="로그아웃" onClick={() => { setLoginPassword(""); void supabase?.auth.signOut({ scope: "local" }); }}><LogOut size={18} /></button></div>}</div>
-        <SupportContact organization={tenantOrganization} compact />
+        <SupportContact compact />
       </aside>
       <main className="main-content">
         <header className="topbar"><button className="menu-button" onClick={() => setMenuOpen((open) => !open)} aria-label="메뉴 열기"><Menu /></button><div><strong>{isAdminRole(effectiveRole) ? adminNav.find((item) => item.id === adminView)?.label : employeeNav.find((item) => item.id === employeeView)?.label}</strong><span>{formatDate(now)}</span></div>{effectiveRole === "super_admin" && organizations.length > 0 && <label className="organization-switcher"><span>조회 기관</span><select value={selectedOrgId} onChange={(event) => setSelectedOrgId(event.target.value)}>{organizations.map((item) => <option key={item.id} value={item.id}>{item.short_name}</option>)}</select></label>}{(installPrompt || iosInstallAvailable) && <button className="install-button" onClick={() => void installApp()}><Download size={16} /> 앱 설치</button>}{!isSupabaseConfigured && <Badge tone="active">데모 모드</Badge>}</header>
@@ -3116,7 +3115,6 @@ function OrganizationBrandingSettings({ scope = "organization", branding, onSave
     logoUrl: branding?.brand_logo_url || "",
     primaryColor: resolved.primaryColor,
     accentColor: resolved.accentColor,
-    supportEmail: branding?.support_email || "",
   });
   const [uploading, setUploading] = useState(false);
 
@@ -3130,7 +3128,6 @@ function OrganizationBrandingSettings({ scope = "organization", branding, onSave
       logoUrl: branding?.brand_logo_url || "",
       primaryColor: next.primaryColor,
       accentColor: next.accentColor,
-      supportEmail: branding?.support_email || "",
     });
   }, [branding]);
 
@@ -3165,7 +3162,6 @@ function OrganizationBrandingSettings({ scope = "organization", branding, onSave
       <input name="brand_logo_url" type="hidden" value={draft.logoUrl} readOnly />
       <label>대표 색상<input name="brand_primary_color" type="color" value={draft.primaryColor} onChange={(event) => setDraft({ ...draft, primaryColor: event.target.value })} /></label>
       <label>강조 색상<input name="brand_accent_color" type="color" value={draft.accentColor} onChange={(event) => setDraft({ ...draft, accentColor: event.target.value })} /></label>
-      {scope === "organization" && <label className="full">기관 내부 문의 이메일<input name="support_email" type="email" value={draft.supportEmail} onChange={(event) => setDraft({ ...draft, supportEmail: event.target.value })} placeholder="근태, 계정, 기록 문의를 받을 기관 담당자 이메일" /><small>직원 개인정보와 근태기록 관련 문의는 이 기관 내부 연락처로 안내합니다.</small></label>}
     </div>
     <div className="setting-info"><ShieldCheck /><p>색상은 메뉴 선택 상태, 버튼, 강조 화면에도 함께 적용됩니다. 로고는 주소를 입력하지 않고 파일만 올리면 됩니다.</p></div>
     <div className="branding-actions">

@@ -5603,10 +5603,6 @@ select '출퇴근시각 삭제 후 재기록 보완 완료' as result;
 -- ============================================================================
 begin;
 
-alter table public.organizations add column if not exists support_email text;
-alter table public.organizations drop constraint if exists organizations_support_email_check;
-alter table public.organizations add constraint organizations_support_email_check
-check (support_email is null or support_email ~* '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$') not valid;
 alter table public.organization_settings add column if not exists emergency_support_enabled boolean not null default true;
 
 create or replace function public.enforce_emergency_support_feature_toggle()
