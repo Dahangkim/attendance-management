@@ -455,7 +455,7 @@ test("iOS users receive manual home screen installation guidance", async () => {
   const app = await read("app/attendance-app.tsx");
   const layout = await read("app/layout.tsx");
   const manifest = await read("app/api/manifest/route.ts");
-  for (const text of ["iosInstallAvailable", "IosInstallGuide", "홈 화면에 추가", "웹 앱으로 열기", "iOS Chrome", "navigatorWithStandalone"]) assert.ok(app.includes(text));
+  for (const text of ["iosInstallAvailable", "androidInstallAvailable", "IosInstallGuide", "홈 화면에 추가", "앱 설치", "웹 앱으로 열기", "iOS Chrome", "navigatorWithStandalone"]) assert.ok(app.includes(text));
   assert.ok(layout.includes("appleWebApp"));
   assert.ok(layout.includes('apple: icon'));
   assert.ok(manifest.includes('display: "standalone"'));

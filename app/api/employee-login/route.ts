@@ -25,6 +25,7 @@ export async function POST(request: Request) {
       ? body.employeeNumber.trim()
       : "";
   const password = typeof body?.password === "string" ? body.password : "";
+  const mobileDevice = body?.mobileDevice === true || /Android|iPhone|iPad|iPod|Mobile/i.test(request.headers.get("user-agent") || "") || request.headers.get("sec-ch-ua-mobile") === "?1";
   const isEmail = identifier.includes("@");
   const employeeNumber = identifier.toUpperCase();
   if ((!isEmail && !/^[A-Z0-9-]{2,30}$/.test(employeeNumber)) || password.length < 1 || password.length > 200) {
@@ -47,6 +48,9 @@ export async function POST(request: Request) {
     );
   }
   const profile = profiles[0];
+  if (["admin", "org_admin"].includes(profile.role) && mobileDevice) {
+    return json({ ok: false, code: "ADMIN_DESKTOP_REQUIRED" }, 403);
+  }
   let organization = null;
   if (profile.role !== "super_admin") {
     if (!profile.org_id) return rejectLogin("missing_organization");

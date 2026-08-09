@@ -14,6 +14,12 @@ export async function GET(request: Request) {
     : null;
   const brand = organizationBranding(organization || deploymentBrandingSource());
   const icon = brand.logoUrl || "/api/brand-icon";
+  const iconType = brand.logoUrl
+    ? /\.jpe?g(?:\?|$)/i.test(brand.logoUrl) ? "image/jpeg"
+      : /\.webp(?:\?|$)/i.test(brand.logoUrl) ? "image/webp"
+        : "image/png"
+    : "image/svg+xml";
+  const iconSizes = brand.logoUrl ? "192x192 512x512" : "any";
   return Response.json({
     name: brand.title,
     short_name: brand.shortTitle,
@@ -23,6 +29,9 @@ export async function GET(request: Request) {
     background_color: "#f3f2ec",
     theme_color: brand.primaryColor,
     lang: "ko",
-    icons: [{ src: icon, sizes: "any", type: "image/svg+xml", purpose: "any maskable" }],
+    icons: [
+      { src: icon, sizes: iconSizes, type: iconType, purpose: "any" },
+      ...(!brand.logoUrl ? [{ src: icon, sizes: "512x512", type: iconType, purpose: "maskable" }] : []),
+    ],
   }, { headers: { "Cache-Control": "no-store", "Content-Type": "application/manifest+json; charset=utf-8" } });
 }

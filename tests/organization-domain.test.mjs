@@ -34,6 +34,18 @@ test("branding is centralized and resolved from each organization", async () => 
   assert.doesNotMatch(deploymentBranding, /실제 기관명/);
 });
 
+test("logged-out installation keeps domain branding and Android manual install available", async () => {
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  const manifest = await readFile(new URL("app/api/manifest/route.ts", root), "utf8");
+  assert.match(app, /tenantOrganization \|\| PUBLIC_LOGIN_BRANDING/);
+  assert.match(app, /fetch\("\/api\/organization-context"/);
+  assert.match(app, /androidInstallAvailable/);
+  assert.match(app, /안드로이드 앱 설치/);
+  assert.match(manifest, /brand\.logoUrl \|\| "\/api\/brand-icon"/);
+  assert.match(manifest, /const iconType/);
+  assert.match(manifest, /const iconSizes = brand\.logoUrl \? "192x192 512x512" : "any"/);
+});
+
 test("deployment branding is used when a host is not assigned to an organization", async () => {
   const requestBranding = await readFile(new URL("app/_lib/request-branding.ts", root), "utf8");
   const manifest = await readFile(new URL("app/api/manifest/route.ts", root), "utf8");
@@ -43,6 +55,34 @@ test("deployment branding is used when a host is not assigned to an organization
   assert.match(manifest, /organization \|\| deploymentBrandingSource\(\)/);
   assert.match(icon, /organization \|\| deploymentBrandingSource\(\)/);
   assert.doesNotMatch(context, /LOCAL_HOSTS|\? "sample"/);
+});
+
+test("the deployment default organization can be selected by its exact institution name", async () => {
+  const context = await readFile(new URL("app/api/_lib/organization-context.ts", root), "utf8");
+  assert.match(context, /fallbackCode\.startsWith\("name:"\)/);
+  assert.match(context, /findOrganizationByName/);
+  assert.match(context, /org_name\.ilike\.\*\$\{value\}\*,short_name\.ilike\.\*\$\{value\}\*/);
+  assert.match(context, /findOrganizationByName[\s\S]+\.eq\("is_active", true\)\.maybeSingle\(\)/);
+});
+
+test("the shared deployment can use the configured super administrator branding", async () => {
+  const context = await readFile(new URL("app/api/_lib/organization-context.ts", root), "utf8");
+  assert.match(context, /findSuperAdminBranding/);
+  assert.match(context, /fallbackCode === "super_admin"/);
+  assert.match(context, /\.eq\("role", "super_admin"\)\.eq\("is_active", true\)/);
+  assert.match(context, /brand_logo_url: result\.data\.brand_logo_url/);
+});
+
+test("organization administrator login is limited to desktop devices", async () => {
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  const login = await readFile(new URL("app/api/employee-login/route.ts", root), "utf8");
+  assert.match(app, /isMobileOrTabletDevice/);
+  assert.match(app, /기관관리자 계정은 데스크톱에서만 로그인할 수 있습니다/);
+  assert.match(app, /AdminDesktopNotice/);
+  assert.match(app, /입력한 계정은 정상적인 기관관리자 계정입니다/);
+  assert.match(login, /\["admin", "org_admin"\]\.includes\(profile\.role\) && mobileDevice/);
+  assert.match(login, /ADMIN_DESKTOP_REQUIRED/);
+  assert.doesNotMatch(login, /\["super_admin"\]\.includes\(profile\.role\) && mobileDevice/);
 });
 
 test("administrator sidebar uses the configurable short mark without adding employee avatar settings", async () => {
@@ -78,7 +118,7 @@ test("unified login supports email and safely migrates legacy short passwords", 
   assert.match(route, /password: `attendance:\$\{password\}`/);
   assert.match(route, /update\(\{ must_change_password: true \}\)/);
   assert.doesNotMatch(route, /authError && profile\.must_change_password/);
-  assert.match(app, /body: JSON\.stringify\(\{ identifier, password: loginPassword \}\)/);
+  assert.match(app, /body: JSON\.stringify\(\{ identifier, password: loginPassword, mobileDevice: isMobileOrTabletDevice\(\) \}\)/);
 });
 
 test("employee creation assigns organization on the server", async () => {
