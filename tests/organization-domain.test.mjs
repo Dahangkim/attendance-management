@@ -560,6 +560,7 @@ test("only public developer support is exposed and institution support stays off
   assert.match(owner, /NEXT_PUBLIC_MAINTAINER_EMAIL/);
   assert.match(app, /이름, 사번, 근태기록 등 개인정보를 보내지 마세요/);
   assert.match(app, /근태와 계정 문의는 소속 기관 관리자에게 문의하세요/);
+  assert.match(app, /isAdminRole\(effectiveRole\) && <SupportContact compact \/>/);
   assert.doesNotMatch(app, /support_email|supportEmail/);
   assert.doesNotMatch(context, /support_email/);
   assert.doesNotMatch(login, /support_email/);
