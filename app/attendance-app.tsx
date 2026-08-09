@@ -377,6 +377,10 @@ const readableAuditValue = (value: string) => {
   } catch { return value; }
   return value;
 };
+const auditDisplayValue = (log: AuditLog, value: string, position: "before" | "after") => {
+  if (log.action_type === "organization_branding_updated") return position === "before" ? "이전 기관 화면 설정" : "변경된 기관 화면 설정";
+  return readableAuditValue(value);
+};
 const auditDescription = (log: AuditLog) => {
   if (log.action_type === "overtime_review") return readableAuditValue(log.after_value) === "반려" ? "시간외근무를 반려했습니다." : `시간외근무를 ${readableAuditValue(log.after_value)} 처리했습니다.`;
   if (log.action_type === "request_approved") return `${REQUEST_TYPE_LABEL[log.changed_field] || auditFieldLabel(log.changed_field)}을 승인했습니다.`;
@@ -2898,8 +2902,9 @@ function AuditView({ logs, brandTitle, onRestore, superAdmin = false, selectedOr
   const sourceLogs = supabase ? monthLogs : logs;
   const governanceActions = new Set(["organization_change_approved", "organization_change_rejected", "organization_change_reopened"]);
   const categoryLogs = sourceLogs.filter((log) => {
-    if (log.changed_by_role !== "super_admin") return category === "institution" && (!selectedOrgId || log.org_id === selectedOrgId);
     if (governanceActions.has(log.action_type)) return category === "governance" && (!selectedOrgId || log.org_id === selectedOrgId);
+    if (log.org_id && log.changed_by_role === "super_admin") return category === "governance" && (!selectedOrgId || log.org_id === selectedOrgId);
+    if (log.org_id) return category === "institution" && (!selectedOrgId || log.org_id === selectedOrgId);
     if (!superAdmin) return category === "governance";
     return category === "independent";
   });
@@ -2936,11 +2941,11 @@ function AuditView({ logs, brandTitle, onRestore, superAdmin = false, selectedOr
   const totalVisible = displayLogs.length + (category === "governance" ? reviewedChanges.length : 0);
   return <section>
     <div className="page-heading"><div><span className="kicker">감사 로그</span><h1>변경 이력</h1><p>{superAdmin ? `${selectedOrganizationName} 활동과 최고관리자의 기관 처리, 최고관리자 본인 설정을 구분해 보여줍니다.` : "기관 내부 활동과 최고관리자가 이 기관에 처리한 내용을 구분해 보여줍니다."}</p></div><div className="export-menu"><button className="primary-button compact"><Download /> 내보내기</button><div><button onClick={exportAuditCsv}>CSV</button><button onClick={() => void exportAuditExcel()}>엑셀</button></div></div></div>
-    {(superAdmin || organizationChanges.length > 0 || sourceLogs.some((log) => log.changed_by_role === "super_admin")) && <div className="request-category-tabs" aria-label="변경 이력 구분"><button className={category === "institution" ? "active" : ""} onClick={() => setCategory("institution")}>기관 내부 활동</button><button className={category === "governance" ? "active" : ""} onClick={() => setCategory("governance")}>최고관리자의 기관 처리</button>{superAdmin && <button className={category === "independent" ? "active" : ""} onClick={() => setCategory("independent")}>최고관리자 직접 변경</button>}</div>}
+    {(superAdmin || organizationChanges.length > 0 || sourceLogs.some((log) => log.changed_by_role === "super_admin")) && <div className="request-category-tabs audit-category-tabs" aria-label="변경 이력 구분"><button className={category === "institution" ? "active" : ""} onClick={() => setCategory("institution")}>기관 내부 활동</button><button className={category === "governance" ? "active" : ""} onClick={() => setCategory("governance")}>최고관리자의 기관 처리</button>{superAdmin && <button className={category === "independent" ? "active" : ""} onClick={() => setCategory("independent")}>최고관리자 직접 변경</button>}</div>}
     <div className="toolbar-card audit-toolbar"><MonthPicker value={auditMonth} onChange={setAuditMonth} /><label className="search-field"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="직원명, 변경 항목, 사유 검색" /></label><Badge tone="neutral">총 {totalVisible}건</Badge></div>
     <div className="timeline">
       {category === "governance" && reviewedChanges.map((request) => <article key={`request-${request.id}`}><div className="timeline-dot"><ShieldCheck /></div><div className="timeline-content"><div><strong>{selectedOrganizationName}</strong><Badge tone={request.status === "approved" ? "positive" : "danger"}>{request.status === "approved" ? "승인" : "반려"}</Badge><time>{formatDate(request.reviewed_at || request.requested_at)} {formatTime(request.reviewed_at || request.requested_at)}</time></div><p>{requestTypeLabel(request.request_type)} 변경 요청을 {request.status === "approved" ? "승인하고 적용했습니다." : "반려했습니다."}</p><div className="audit-values"><span>검토 대기</span><ArrowRight /><span>{request.status === "approved" ? "승인, 설정 적용" : "반려, 미적용"}</span></div><small>요청 사유 {request.reason}, 검토 메모 {request.review_note || "없음"}</small></div></article>)}
-      {displayLogs.map((log) => { const directScopeName = log.action_type.startsWith("super_admin_") || log.action_type === "attendance_retention_purged" ? "최고관리자" : log.organization_name || "통합관리"; return <article key={log.id}><div className="timeline-dot"><History /></div><div className="timeline-content"><div><strong>{superAdmin && category === "independent" ? directScopeName : log.employee_name}</strong><Badge tone="neutral">{AUDIT_ACTION_LABEL[log.action_type] || log.action_type}</Badge><time>{formatDate(log.created_at)} {formatTime(log.created_at)}</time></div><p>{auditDescription(log)}</p><div className="audit-values"><span>{readableAuditValue(log.before_value)}</span><ArrowRight /><span>{readableAuditValue(log.after_value)}</span></div><small>처리자 {log.changed_by_name || "시스템"}, 사유 {log.reason || "기록 생성"}</small>{onRestore && log.action_type === "admin_delete" && log.attendance_record_id && <button className="audit-restore-button" onClick={() => onRestore(log)}><RefreshCw /> 삭제 취소, 기록 복원</button>}</div></article>; })}
+      {displayLogs.map((log) => { const directScopeName = log.action_type.startsWith("super_admin_") || log.action_type === "attendance_retention_purged" ? "최고관리자" : log.organization_name || "통합관리"; return <article key={log.id}><div className="timeline-dot"><History /></div><div className="timeline-content"><div><strong>{superAdmin && category === "independent" ? directScopeName : log.employee_name}</strong><Badge tone="neutral">{AUDIT_ACTION_LABEL[log.action_type] || log.action_type}</Badge><time>{formatDate(log.created_at)} {formatTime(log.created_at)}</time></div><p>{auditDescription(log)}</p><div className="audit-values"><span>{auditDisplayValue(log, log.before_value, "before")}</span><ArrowRight /><span>{auditDisplayValue(log, log.after_value, "after")}</span></div><small>처리자 {log.changed_by_name || "시스템"}, 사유 {log.reason || "기록 생성"}</small>{onRestore && log.action_type === "admin_delete" && log.attendance_record_id && <button className="audit-restore-button" onClick={() => onRestore(log)}><RefreshCw /> 삭제 취소, 기록 복원</button>}</div></article>; })}
       {totalVisible === 0 && <EmptyState title="변경 이력이 없습니다" text="선택한 기관, 달, 구분에 맞는 변경 이력이 없습니다." />}
     </div>
   </section>;
@@ -3257,19 +3262,19 @@ function WorkPolicySettings({ policy, setPolicy, templates, assignments, profile
   return <>
     <article className="surface-card full-span-card">
       <div className="card-heading"><div><span className="kicker">기관별 근무조건</span><h2>근무방식과 날짜 판정</h2></div><Clock3 /></div>
-      <div className="form-grid">
+      <div className="form-grid policy-basic-grid">
         <label>근무방식<select value={policy.attendance_mode} onChange={(event) => setPolicy({ ...policy, attendance_mode: event.target.value as OrganizationWorkPolicy["attendance_mode"] })}><option value="fixed">고정 근무</option><option value="flexible">유연 근무</option><option value="shift">교대와 당직 근무</option></select></label>
         <label>근무일 경계시각<input type="time" value={policy.work_date_boundary_time} onChange={(event) => setPolicy({ ...policy, work_date_boundary_time: event.target.value })} /><small>이 시각 전 퇴근은 전날 근무로 처리</small></label>
         <label>연속 근무 허용시간<input type="number" min={8} max={48} value={policy.max_open_shift_hours} onChange={(event) => setPolicy({ ...policy, max_open_shift_hours: Number(event.target.value) })} /><small>시간</small></label>
         <label>시간외 반올림<select value={policy.overtime_rounding_minutes} onChange={(event) => setPolicy({ ...policy, overtime_rounding_minutes: Number(event.target.value) as OrganizationWorkPolicy["overtime_rounding_minutes"] })}>{[1, 5, 10, 15, 30, 60].map((minute) => <option key={minute} value={minute}>{minute}분</option>)}</select></label>
-        <label className="checkbox-setting"><input type="checkbox" checked={policy.holiday_work_counts_as_overtime} onChange={(event) => setPolicy({ ...policy, holiday_work_counts_as_overtime: event.target.checked })} /> 휴일근무를 시간외근무로 인정</label>
-        <label className="checkbox-setting"><input type="checkbox" checked={policy.require_location} onChange={(event) => setPolicy({ ...policy, require_location: event.target.checked })} /> 출퇴근 위치 확인 사용</label>
-        <label className="checkbox-setting"><input type="checkbox" checked={policy.require_office_ip} onChange={(event) => setPolicy({ ...policy, require_office_ip: event.target.checked })} /> 사무실 IP만 허용</label>
       </div>
-      <div className="setting-info"><Wifi /><p>일반 기관은 이 항목을 끄세요. 꺼도 사무실 IP가 같으면 GPS 오차를 보완하며, GPS와 IP가 모두 다르면 아웃리치 사유를 입력해 저장할 수 있습니다. 켜면 사무실 IP가 아닌 모든 기록을 외부 기록으로 처리합니다.</p></div>
-      <div className="setting-info"><Clock3 /><p>휴일근무 인정 항목을 켜면 주말과 기관 휴일의 실제 근무 전체를 시간외근무로 계산하고, 위 반올림 단위를 적용합니다.</p></div>
+      <div className="policy-toggle-grid">
+        <div className="policy-toggle-card"><label className="checkbox-setting"><input type="checkbox" checked={policy.holiday_work_counts_as_overtime} onChange={(event) => setPolicy({ ...policy, holiday_work_counts_as_overtime: event.target.checked })} /> 휴일근무를 시간외근무로 인정</label><p>주말과 기관 휴일의 실제 근무 전체를 시간외근무로 계산하고, 위 반올림 단위를 적용합니다.</p></div>
+        <div className="policy-toggle-card"><label className="checkbox-setting"><input type="checkbox" checked={policy.require_location} onChange={(event) => setPolicy({ ...policy, require_location: event.target.checked })} /> 출퇴근 위치 확인 사용</label><p>출퇴근 순간의 위치만 확인합니다. 이동경로를 계속 추적하지 않습니다.</p></div>
+        <div className="policy-toggle-card"><label className="checkbox-setting"><input type="checkbox" checked={policy.require_office_ip} onChange={(event) => setPolicy({ ...policy, require_office_ip: event.target.checked })} /> 사무실 IP만 허용</label><p>일반 기관은 끄는 것을 권장합니다. 켜면 사무실 IP가 아닌 기록은 외부 기록으로 처리합니다.</p></div>
+      </div>
       <div className="setting-info"><ShieldCheck /><p>{usesShiftSchedule ? "교대와 당직 근무에서는 아래에서 근무조와 직원별 근무표를 관리합니다. 야간 퇴근은 출근한 날짜의 기록에 연결됩니다." : policy.attendance_mode === "fixed" ? "고정 근무에서는 기관의 기본 근무시간을 사용하므로 근무조와 근무표를 따로 만들지 않습니다." : "유연 근무에서는 기관 기준시간으로 근태를 판정하며 근무조와 근무표를 따로 만들지 않습니다."}</p></div>
-      <button type="button" className="primary-button compact" onClick={onSave} disabled={busy}><Check /> 근무방식 저장</button>
+      <div className="settings-save-actions"><button type="button" className="primary-button compact" onClick={onSave} disabled={busy}><Check /> 근무방식 저장</button></div>
     </article>
     {usesShiftSchedule && <>
     <form className="surface-card" onSubmit={(event) => { event.preventDefault(); onCreateShift(event.currentTarget); }}>

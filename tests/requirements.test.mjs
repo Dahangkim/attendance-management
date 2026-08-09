@@ -462,6 +462,30 @@ test("audit history uses readable Korean labels", async () => {
   assert.ok(!app.includes('<b>{log.changed_field}</b>을 변경했습니다.'));
 });
 
+test("audit history classifies by organization scope and keeps long values inside cards", async () => {
+  const [app, css] = await Promise.all([read("app/attendance-app.tsx"), read("app/globals.css")]);
+  assert.ok(app.includes('log.org_id && log.changed_by_role === "super_admin"'));
+  assert.ok(app.includes('if (log.org_id) return category === "institution"'));
+  assert.ok(app.includes('governanceActions.has(log.action_type)'));
+  assert.ok(app.includes('"이전 기관 화면 설정"'));
+  assert.ok(app.includes('"변경된 기관 화면 설정"'));
+  assert.ok(css.includes(".audit-values span"));
+  assert.ok(css.includes("overflow-wrap: anywhere"));
+  assert.match(css, /\.audit-restore-button \{[^}]*color: var\(--green-deep\)/);
+  assert.doesNotMatch(css, /\.audit-restore-button \{[^}]*color: var\(--brand\)/);
+  assert.ok(app.includes('className="request-category-tabs audit-category-tabs"'));
+  assert.ok(css.includes(".audit-category-tabs button.active"));
+  assert.ok(css.includes("color: var(--green-contrast)"));
+});
+
+test("work policy toggles keep each explanation with its control", async () => {
+  const [app, css] = await Promise.all([read("app/attendance-app.tsx"), read("app/globals.css")]);
+  assert.ok(app.includes('className="policy-toggle-grid"'));
+  assert.equal((app.match(/className="policy-toggle-card"/g) || []).length, 3);
+  assert.ok(app.includes('className="settings-save-actions"'));
+  assert.ok(css.includes(".policy-toggle-grid"));
+});
+
 test("employees can resubmit requests and admins can restore deleted attendance", async () => {
   const app = await read("app/attendance-app.tsx");
   const sql = await read("supabase/upgrade_unified_requests_and_admin_review.sql");
