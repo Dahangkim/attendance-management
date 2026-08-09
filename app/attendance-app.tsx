@@ -2140,7 +2140,7 @@ export default function AttendanceApp() {
     if (!window.confirm("삭제를 취소하고 이 근태기록을 다시 월별 현황에 표시할까요?")) return;
     if (supabase) {
       const { error } = await supabase.rpc("admin_restore_attendance", { p_record_id: log.attendance_record_id, p_reason: reason });
-      if (error) { const message = String(error.message || ""); setNotice({ tone: "error", text: message.includes("ACTIVE_RECORD_ALREADY_EXISTS") ? "같은 직원과 날짜의 다른 근태기록이 이미 있어 복원할 수 없습니다." : `근태기록을 복원하지 못했습니다${error.code ? ` (오류코드 ${error.code})` : ""}. 월 마감 상태와 데이터베이스 보완 SQL을 확인해 주세요.` }); return; }
+      if (error) { const message = String(error.message || ""); const detail = message.includes("ACTIVE_RECORD_ALREADY_EXISTS") ? "같은 직원과 날짜의 다른 근태기록이 이미 있습니다." : message.includes("MONTH_CLOSED") ? "월 마감된 기록입니다. 마감을 해제한 뒤 다시 시도해 주세요." : message.includes("ORGANIZATION_ACCESS_DENIED") ? "다른 기관의 기록은 복원할 수 없습니다." : message.includes("ADMIN_REQUIRED") ? "기관관리자 권한 보완 SQL을 적용해 주세요." : "근태기록 복원 보완 SQL 적용 여부를 확인해 주세요."; setNotice({ tone: "error", text: `근태기록을 복원하지 못했습니다. ${detail}` }); return; }
       if (currentProfile) await loadRemoteData(currentProfile);
     }
     setNotice({ tone: "success", text: "삭제를 취소하고 근태기록을 복원했습니다. 복원 이력도 변경 이력에 남았습니다." });
@@ -2161,7 +2161,7 @@ export default function AttendanceApp() {
     const { data: result, error } = await supabase.rpc("admin_create_attendance_exceptions", payload);
     if (error) {
       const text = `${error.message || ""} ${error.details || ""}`;
-      setNotice({ tone: "error", text: text.includes("EXCEPTION_OVERLAP") ? "해당 직원에게 같은 기간과 겹치는 예외 근무가 이미 있습니다." : text.includes("INVALID_DATE_RANGE") ? "종료일은 시작일보다 빠를 수 없습니다." : `예외 근무를 등록하지 못했습니다${error.code ? ` (오류코드 ${error.code})` : ""}. 데이터베이스 보완 SQL 적용 여부를 확인해 주세요.` });
+      setNotice({ tone: "error", text: text.includes("EXCEPTION_OVERLAP") ? "해당 직원에게 같은 기간과 겹치는 예외 근무가 이미 있습니다." : text.includes("INVALID_DATE_RANGE") ? "종료일은 시작일보다 빠를 수 없습니다." : text.includes("ORGANIZATION_ACCESS_DENIED") ? "현재 기관에 속하지 않은 직원이 포함되어 있습니다." : text.includes("ADMIN_REQUIRED") ? "기관관리자 권한 보완 SQL을 적용해 주세요." : `예외 근무를 등록하지 못했습니다${error.code ? ` (오류코드 ${error.code})` : ""}. 데이터베이스 보완 SQL 적용 여부를 확인해 주세요.` });
       return;
     }
     await loadRemoteData(currentProfile);
@@ -2266,7 +2266,7 @@ export default function AttendanceApp() {
     const reason = window.prompt(`${item.employee_name}님의 ${item.start_date}부터 ${item.end_date}까지 예외 근무를 취소하는 사유를 입력해 주세요.`) || "";
     if (reason.trim().length < 5) { if (reason) setNotice({ tone: "warning", text: "취소 사유를 5자 이상 입력해 주세요." }); return; }
     const { error } = await supabase.rpc("admin_cancel_attendance_exception", { p_exception_id: item.id, p_reason: reason });
-    if (error) { setNotice({ tone: "error", text: `예외 근무를 취소하지 못했습니다${error.code ? ` (오류코드 ${error.code})` : ""}.` }); return; }
+    if (error) { const message = String(error.message || ""); const detail = message.includes("ORGANIZATION_ACCESS_DENIED") ? "다른 기관의 예외 근무는 취소할 수 없습니다." : message.includes("ADMIN_REQUIRED") ? "기관관리자 권한 보완 SQL을 적용해 주세요." : message.includes("EXCEPTION_NOT_FOUND") ? "이미 취소됐거나 찾을 수 없는 일정입니다." : `데이터베이스 오류코드 ${error.code || "확인 불가"}`; setNotice({ tone: "error", text: `예외 근무를 취소하지 못했습니다. ${detail}` }); return; }
     await loadRemoteData(currentProfile);
     setNotice({ tone: "success", text: "예외 근무를 취소했습니다. 취소 사유는 변경 이력에 보존됩니다." });
   }
@@ -2842,12 +2842,14 @@ function RequestAdminWorkspace({ requests, records, emergencySupportEnabled, onR
   const statusLabels = { pending: "검토 대기", approved: "승인", rejected: "반려", more_info: "추가정보 필요", cancelled: "본인 취소" };
   const monthly = requests.filter((request) => monthKey(new Date(request.requested_at)) === requestMonth);
   const categoryOf = (requestType: string) => ["clock_in_at", "clock_out_at"].includes(requestType) ? "correction" : ["annual_leave", "comp_time", "sick_leave", "special_leave", "other_leave"].includes(requestType) ? "leave" : requestType === "business_trip" ? "exception" : requestType === "overtime" ? "overtime" : requestType === "emergency_support" ? "emergency" : "all";
+  const categories = emergencySupportEnabled ? (["all", "correction", "leave", "exception", "overtime", "emergency"] as const) : (["all", "correction", "leave", "exception", "overtime"] as const);
+  useEffect(() => { if (!emergencySupportEnabled && categoryView === "emergency") setCategoryView("all"); }, [emergencySupportEnabled, categoryView]);
   const visible = monthly.filter((request) => (statusView === "all" || (statusView === "pending" ? ["pending", "more_info"].includes(request.status) : request.status === statusView)) && (categoryView === "all" || categoryOf(request.request_type) === categoryView));
   const pendingCount = monthly.filter((request) => ["pending", "more_info"].includes(request.status)).length;
   return <section>
     <div className="page-heading"><div><span className="kicker">근태 신청</span><h1>근태 신청 관리</h1><p>{emergencySupportEnabled ? "출퇴근 수정, 휴가, 출장, 시간외근무와 퇴근 후 긴급지원 근무를 검토합니다." : "출퇴근 수정, 휴가, 출장과 시간외근무를 검토합니다. 기존 긴급지원 기록은 계속 조회할 수 있습니다."}</p></div><div className="heading-actions"><Badge tone="warning">대기 {pendingCount}건</Badge>{emergencySupportEnabled && <button className="primary-button compact" onClick={onEmergencyWork}><FileClock /> 긴급지원 근무 등록</button>}</div></div>
     <div className="toolbar-card request-admin-toolbar"><MonthPicker value={requestMonth} onChange={setRequestMonth} /><div className="request-status-tabs">{(["pending", "approved", "rejected", "cancelled", "all"] as const).map((status) => <button key={status} className={statusView === status ? "active" : ""} onClick={() => setStatusView(status)}>{status === "pending" ? "검토 대기" : status === "approved" ? "승인" : status === "rejected" ? "반려" : status === "cancelled" ? "본인 취소" : "전체"}</button>)}</div><Badge tone="neutral">{visible.length}건</Badge></div>
-    <div className="request-category-tabs" aria-label="근태 신청 유형">{(["all", "correction", "leave", "exception", "overtime", "emergency"] as const).map((category) => <button key={category} className={categoryView === category ? "active" : ""} onClick={() => setCategoryView(category)}>{category === "all" ? "전체 유형" : category === "correction" ? "출퇴근 수정" : category === "leave" ? "휴가와 대체휴무" : category === "exception" ? "출장과 예외근무" : category === "overtime" ? "일반 시간외근무" : "긴급지원"}</button>)}</div>
+    <div className="request-category-tabs" aria-label="근태 신청 유형">{categories.map((category) => <button key={category} className={categoryView === category ? "active" : ""} onClick={() => setCategoryView(category)}>{category === "all" ? "전체 유형" : category === "correction" ? "출퇴근 수정" : category === "leave" ? "휴가와 대체휴무" : category === "exception" ? "출장과 예외근무" : category === "overtime" ? "일반 시간외근무" : "긴급지원"}</button>)}</div>
     <div className="review-list">{visible.map((request) => {
       const linkedRecord = request.attendance_record_id ? records.find((record) => record.id === request.attendance_record_id) : undefined;
       const isOpen = ["pending", "more_info"].includes(request.status);
@@ -3057,13 +3059,7 @@ function SettingsView({
         <div className="setting-info"><ShieldCheck /><p>평일 시간외근무는 휴게시간을 제외한 실제 근무가 8시간을 넘었는지로 계산합니다.</p></div>
         <div className="branding-actions"><button type="button" className="primary-button compact" onClick={onSave} disabled={busy}><Check /> 기본 근무시간 저장</button></div>
       </article>
-      <article className="surface-card">
-        <div className="card-heading"><div><span className="kicker">선택 기능</span><h2>긴급지원 근무</h2></div><FileClock /></div>
-        <p className="card-description">퇴근 후 긴급지원 근무를 사용하는 기관만 신청과 관리자 직접 등록 기능을 열 수 있습니다. 기능을 꺼도 기존 기록은 삭제되지 않습니다.</p>
-        <label className="choice-card"><input type="checkbox" checked={organizationDraft.emergency_support_enabled} onChange={(event) => setOrganizationDraft({ ...organizationDraft, emergency_support_enabled: event.target.checked })} /><span><strong>긴급지원 기능 사용</strong><small>{organizationDraft.emergency_support_enabled ? "직원과 관리자 화면에 등록 버튼을 표시합니다." : "신규 등록 버튼을 숨기고 기존 기록만 보존합니다."}</small></span></label>
-        <div className="branding-actions"><button type="button" className="primary-button compact" onClick={onSave} disabled={busy}><Check /> 긴급지원 설정 저장</button></div>
-      </article>
-      <WorkPolicySettings policy={workPolicy} setPolicy={setWorkPolicy} templates={shiftTemplates} assignments={shiftAssignments} profiles={profiles} onSave={onSaveWorkPolicy} onCreateShift={onCreateShift} onSetShiftActive={onSetShiftActive} onAssignShift={onAssignShift} onRemoveAssignment={onRemoveAssignment} busy={busy} />
+      <WorkPolicySettings policy={workPolicy} setPolicy={setWorkPolicy} organizationSettings={organizationDraft} setOrganizationSettings={setOrganizationDraft} templates={shiftTemplates} assignments={shiftAssignments} profiles={profiles} onSave={() => { onSave(); onSaveWorkPolicy(); }} onCreateShift={onCreateShift} onSetShiftActive={onSetShiftActive} onAssignShift={onAssignShift} onRemoveAssignment={onRemoveAssignment} busy={busy} />
       <article className="surface-card holiday-card">
         <div className="card-heading"><div><span className="kicker">연간 일정</span><h2>공휴일 관리</h2></div><CalendarDays /></div>
         <p className="card-description">Google 공휴일을 기본으로 불러오고, 임시공휴일과 지방공휴일은 언제든 다시 불러오거나 직접 보완할 수 있습니다.</p>
@@ -3290,9 +3286,11 @@ function OrganizationChangeRequestSettings({ workplace, organizationSettings, re
   </article>;
 }
 
-function WorkPolicySettings({ policy, setPolicy, templates, assignments, profiles, onSave, onCreateShift, onSetShiftActive, onAssignShift, onRemoveAssignment, busy }: {
+function WorkPolicySettings({ policy, setPolicy, organizationSettings, setOrganizationSettings, templates, assignments, profiles, onSave, onCreateShift, onSetShiftActive, onAssignShift, onRemoveAssignment, busy }: {
   policy: OrganizationWorkPolicy;
   setPolicy: (value: OrganizationWorkPolicy) => void;
+  organizationSettings: OrganizationSettings;
+  setOrganizationSettings: (value: OrganizationSettings) => void;
   templates: WorkShiftTemplate[];
   assignments: EmployeeShiftAssignment[];
   profiles: Profile[];
@@ -3319,9 +3317,10 @@ function WorkPolicySettings({ policy, setPolicy, templates, assignments, profile
         <div className="policy-toggle-card"><label className="checkbox-setting"><input type="checkbox" checked={policy.holiday_work_counts_as_overtime} onChange={(event) => setPolicy({ ...policy, holiday_work_counts_as_overtime: event.target.checked })} /> 휴일근무를 시간외근무로 인정</label><p>주말과 기관 휴일의 실제 근무 전체를 시간외근무로 계산하고, 위 반올림 단위를 적용합니다.</p></div>
         <div className="policy-toggle-card"><label className="checkbox-setting"><input type="checkbox" checked={policy.require_location} onChange={(event) => setPolicy({ ...policy, require_location: event.target.checked })} /> 출퇴근 위치 확인 사용</label><p>출퇴근 순간의 위치만 확인합니다. 이동경로를 계속 추적하지 않습니다.</p></div>
         <div className="policy-toggle-card"><label className="checkbox-setting"><input type="checkbox" checked={policy.require_office_ip} onChange={(event) => setPolicy({ ...policy, require_office_ip: event.target.checked })} /> 사무실 IP만 허용</label><p>일반 기관은 끄는 것을 권장합니다. 켜면 사무실 IP가 아닌 기록은 외부 기록으로 처리합니다.</p></div>
+        <div className="policy-toggle-card"><label className="checkbox-setting"><input type="checkbox" checked={organizationSettings.emergency_support_enabled} onChange={(event) => setOrganizationSettings({ ...organizationSettings, emergency_support_enabled: event.target.checked })} /> 긴급지원 근무 사용</label><p>사용하는 기관에만 직원 신청과 관리자 등록 기능을 표시합니다. 꺼도 기존 기록은 보존됩니다.</p></div>
       </div>
       <div className="setting-info"><ShieldCheck /><p>{usesShiftSchedule ? "교대와 당직 근무에서는 아래에서 근무조와 직원별 근무표를 관리합니다. 야간 퇴근은 출근한 날짜의 기록에 연결됩니다." : policy.attendance_mode === "fixed" ? "고정 근무에서는 기관의 기본 근무시간을 사용하므로 근무조와 근무표를 따로 만들지 않습니다." : "유연 근무에서는 기관 기준시간으로 근태를 판정하며 근무조와 근무표를 따로 만들지 않습니다."}</p></div>
-      <div className="settings-save-actions"><button type="button" className="primary-button compact" onClick={onSave} disabled={busy}><Check /> 근무방식 저장</button></div>
+      <div className="settings-save-actions"><button type="button" className="primary-button compact" onClick={onSave} disabled={busy}><Check /> 기관별 근무조건 저장</button></div>
     </article>
     {usesShiftSchedule && <>
     <form className="surface-card" onSubmit={(event) => { event.preventDefault(); onCreateShift(event.currentTarget); }}>

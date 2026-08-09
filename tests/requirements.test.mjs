@@ -500,7 +500,7 @@ test("audit exports include every category instead of only the selected tab", as
 test("work policy toggles keep each explanation with its control", async () => {
   const [app, css] = await Promise.all([read("app/attendance-app.tsx"), read("app/globals.css")]);
   assert.ok(app.includes('className="policy-toggle-grid"'));
-  assert.equal((app.match(/className="policy-toggle-card"/g) || []).length, 3);
+  assert.equal((app.match(/className="policy-toggle-card"/g) || []).length, 4);
   assert.ok(app.includes('className="settings-save-actions"'));
   assert.ok(css.includes(".policy-toggle-grid"));
 });

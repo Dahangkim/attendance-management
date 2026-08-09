@@ -169,8 +169,8 @@ test("each organization can hide new emergency support actions without deleting 
   const types = await readFile(new URL("lib/types.ts", root), "utf8");
   const migration = await readFile(new URL("supabase/add_emergency_support_feature_toggle.sql", root), "utf8");
   assert.match(types, /emergency_support_enabled: boolean/);
-  assert.match(app, /긴급지원 기능 사용/);
-  assert.match(app, /기존 기록만 보존합니다/);
+  assert.match(app, /긴급지원 근무 사용/);
+  assert.match(app, /꺼도 기존 기록은 보존됩니다/);
   assert.match(app, /emergencySupportEnabled \&\& <button className="primary-button compact"/);
   assert.match(app, /emergencySupportEnabled \|\| activeEmergencyRequest/);
   assert.match(app, /error\.code === "PGRST202"/);
@@ -179,6 +179,21 @@ test("each organization can hide new emergency support actions without deleting 
   assert.match(migration, /EMERGENCY_SUPPORT_DISABLED/);
   assert.match(migration, /before insert on public\.correction_requests/);
   assert.match(migration, /where org_id = v_org_id/);
+});
+
+test("organization administrators restore attendance and manage exceptions only in their organization", async () => {
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  const repair = await readFile(new URL("supabase/repair_org_admin_restore_and_exceptions.sql", root), "utf8");
+  for (const fn of ["admin_restore_attendance", "admin_create_attendance_exception", "admin_create_attendance_exceptions", "admin_cancel_attendance_exception"]) {
+    assert.match(repair, new RegExp(`create or replace function public\\.${fn}`));
+  }
+  assert.match(repair, /'admin','org_admin','super_admin'/);
+  assert.match(repair, /ORGANIZATION_ACCESS_DENIED/);
+  assert.match(repair, /v_record\.org_id is distinct from v_org_id/);
+  assert.match(repair, /v_item\.org_id is distinct from v_org_id/);
+  assert.match(app, /기관별 근무조건 저장/);
+  assert.match(app, /const categories = emergencySupportEnabled/);
+  assert.doesNotMatch(app, /긴급지원 설정 저장/);
 });
 
 test("all employee-scoped tables receive organization isolation", async () => {
