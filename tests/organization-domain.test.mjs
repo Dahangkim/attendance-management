@@ -319,9 +319,9 @@ test("public distribution keeps the maintainer contact visible and configurable"
   const env = await readFile(new URL(".env.example", root), "utf8");
   const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
   assert.match(owner, /NEXT_PUBLIC_APP_OWNER_NAME/);
-  assert.match(owner, /NEXT_PUBLIC_SUPPORT_EMAIL/);
-  assert.match(env, /NEXT_PUBLIC_SUPPORT_EMAIL=indigoblau1223@gmail\.com/);
-  assert.match(app, /mailto:\$\{applicationOwner\.supportEmail\}/);
+  assert.match(owner, /NEXT_PUBLIC_MAINTAINER_EMAIL/);
+  assert.match(env, /NEXT_PUBLIC_MAINTAINER_EMAIL=indigoblau1223@gmail\.com/);
+  assert.match(app, /mailto:\$\{applicationOwner\.maintainerEmail\}/);
   assert.doesNotMatch(app, />수정 요청 메일 보내기</);
   assert.doesNotMatch(app, /수정 요청 이메일은 배포 설정에서 등록합니다/);
   assert.match(app, /readableTextColor/);
@@ -530,4 +530,25 @@ test("security hardening isolates settings, closings, workplaces, and organizati
   assert.match(sql, /v_role not in \('admin','org_admin','super_admin'\)/);
   assert.match(sql, /org_id = v_employee\.org_id/);
   assert.match(sql, /changed_by_role, org_id/);
+});
+
+test("fresh installs enforce emergency support and protected workplace approval", async () => {
+  const install = await readFile(new URL("supabase/install_current.sql", root), "utf8");
+  const repair = await readFile(new URL("supabase/repair_protected_workplace_approval_only.sql", root), "utf8");
+  assert.match(install, /p_emergency_support_enabled boolean/);
+  assert.match(install, /create trigger enforce_emergency_support_feature_toggle before insert/);
+  assert.match(install, /EMERGENCY_SUPPORT_DISABLED/);
+  assert.match(install, /revoke all on function public\.save_workplace_settings[^;]+authenticated/);
+  assert.match(repair, /revoke insert, update, delete on public\.workplaces from authenticated/);
+  assert.match(repair, /revoke insert, update, delete on public\.organization_settings from authenticated/);
+});
+
+test("developer support and institution support contacts are separated", async () => {
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  const owner = await readFile(new URL("lib/application-owner.ts", root), "utf8");
+  const migration = await readFile(new URL("supabase/add_organization_support_contact.sql", root), "utf8");
+  assert.match(owner, /NEXT_PUBLIC_MAINTAINER_EMAIL/);
+  assert.match(app, /이름, 사번, 근태기록 등 개인정보를 보내지 마세요/);
+  assert.match(app, /organization\?\.support_email/);
+  assert.match(migration, /add column if not exists support_email text/);
 });

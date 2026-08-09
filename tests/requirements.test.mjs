@@ -149,13 +149,13 @@ test("all authenticated employees load the active workplace from Supabase", asyn
   assert.ok(app.includes("recordResult, todayResult, openRecordResult, requestResult, workplaceResult"));
 });
 
-test("workplace settings use an admin-checked server function", async () => {
+test("protected workplace settings require the super-admin approval route", async () => {
   const app = await read("app/attendance-app.tsx");
-  const sql = await read("supabase/fix_admin_workplace_policy.sql");
-  assert.ok(app.includes('supabase.rpc("save_workplace_settings"'));
-  assert.ok(sql.includes("security definer"));
-  assert.ok(sql.includes("ADMIN_REQUIRED"));
-  assert.ok(sql.includes("grant execute"));
+  const sql = await read("supabase/repair_protected_workplace_approval_only.sql");
+  assert.ok(!app.includes('supabase.rpc("save_workplace_settings"'));
+  assert.ok(app.includes('onRequest(event.currentTarget, "workplace_location")'));
+  assert.ok(sql.includes('revoke all on function public.save_workplace_settings'));
+  assert.ok(sql.includes('public.is_super_admin()'));
 });
 
 test("organization settings persist work hours and late grace", async () => {

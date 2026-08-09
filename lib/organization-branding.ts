@@ -11,6 +11,7 @@ export interface OrganizationBrandingSource {
   brand_primary_color?: string | null;
   brand_accent_color?: string | null;
   brand_og_image_url?: string | null;
+  support_email?: string | null;
 }
 
 export interface OrganizationBranding {

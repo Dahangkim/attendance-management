@@ -65,8 +65,8 @@ for select to authenticated
 using (public.is_super_admin() or org_id = public.current_profile_org_id());
 create policy "organization admins manage workplaces" on public.workplaces
 for all to authenticated
-using (public.is_super_admin() or (org_id = public.current_profile_org_id() and public.current_profile_role() in ('admin','org_admin')))
-with check (public.is_super_admin() or (org_id = public.current_profile_org_id() and public.current_profile_role() in ('admin','org_admin')));
+using (public.is_super_admin())
+with check (public.is_super_admin());
 
 drop policy if exists "authenticated read organization settings" on public.organization_settings;
 drop policy if exists "admin manages organization settings" on public.organization_settings;
@@ -77,8 +77,8 @@ for select to authenticated
 using (public.is_super_admin() or org_id = public.current_profile_org_id());
 create policy "organization admins manage settings" on public.organization_settings
 for all to authenticated
-using (public.is_super_admin() or (org_id = public.current_profile_org_id() and public.current_profile_role() in ('admin','org_admin')))
-with check (public.is_super_admin() or (org_id = public.current_profile_org_id() and public.current_profile_role() in ('admin','org_admin')));
+using (public.is_super_admin())
+with check (public.is_super_admin());
 
 drop policy if exists "authenticated closing read" on public.monthly_closings;
 drop policy if exists "organization closing read" on public.monthly_closings;
@@ -100,7 +100,7 @@ declare
   v_role text := public.current_profile_role();
   v_workplace public.workplaces;
 begin
-  if v_org_id is null or v_role not in ('admin','org_admin') then raise exception 'ORG_ADMIN_REQUIRED'; end if;
+  if v_org_id is null or v_role <> 'super_admin' then raise exception 'SUPER_ADMIN_REQUIRED'; end if;
   if p_latitude not between -90 and 90 or p_longitude not between -180 and 180 then raise exception 'INVALID_COORDINATES'; end if;
   if p_allowed_radius_meters not between 10 and 5000 or p_low_accuracy_threshold_meters not between 10 and 5000 then raise exception 'INVALID_DISTANCE'; end if;
 
@@ -124,8 +124,7 @@ begin
   return v_workplace;
 end $$;
 
-revoke all on function public.save_workplace_settings(text,double precision,double precision,integer,integer) from public, anon;
-grant execute on function public.save_workplace_settings(text,double precision,double precision,integer,integer) to authenticated;
+revoke all on function public.save_workplace_settings(text,double precision,double precision,integer,integer) from public, anon, authenticated;
 
 -- 기관관리자는 자기 기관의 재직 직원에게만 조회 전용 부관리자 권한을 부여합니다.
 create or replace function public.admin_set_report_viewer(
