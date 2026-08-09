@@ -156,8 +156,30 @@ begin
     'work_type',v_record.work_type,'attendance_status',v_record.attendance_status,'note',v_record.note)::text;
   update public.attendance_records set
     clock_in_at = v_clock_in, clock_out_at = v_clock_out,
+    clock_in_accuracy = case when v_clock_in is null then null else clock_in_accuracy end,
+    clock_in_distance = case when v_clock_in is null then null else clock_in_distance end,
+    clock_in_location_status = case when v_clock_in is null then 'not_checked' else clock_in_location_status end,
+    clock_in_ip_address = case when v_clock_in is null then null else clock_in_ip_address end,
+    clock_in_ip_matched = case when v_clock_in is null then false else clock_in_ip_matched end,
+    clock_out_accuracy = case when v_clock_out is null then null else clock_out_accuracy end,
+    clock_out_distance = case when v_clock_out is null then null else clock_out_distance end,
+    clock_out_location_status = case when v_clock_out is null then 'not_checked' else clock_out_location_status end,
+    clock_out_ip_address = case when v_clock_out is null then null else clock_out_ip_address end,
+    clock_out_ip_matched = case when v_clock_out is null then false else clock_out_ip_matched end,
     work_type = p_work_type,
     attendance_status = case
+      when v_clock_in is null and exists (
+        select 1 from public.correction_requests r
+        where r.employee_id = v_record.employee_id and r.request_type = 'emergency_support'
+          and r.status = 'approved' and r.target_date = v_record.work_date
+      ) then 'holiday_work'
+      when v_clock_in is null and exists (
+        select 1 from public.correction_requests r
+        where r.employee_id = v_record.employee_id
+          and r.request_type in ('annual_leave','comp_time','sick_leave','special_leave','other_leave')
+          and r.status = 'approved' and r.target_date <= v_record.work_date
+          and coalesce(r.end_date,r.target_date) >= v_record.work_date
+      ) then 'leave'
       when v_clock_in is null then 'missing_in'
       when v_clock_out is null and v_record.work_date < (now() at time zone 'Asia/Seoul')::date then 'missing_out'
       when v_clock_out is null then 'working'
@@ -176,6 +198,29 @@ begin
     trim(p_reason),auth.uid(),v_role,v_record.org_id
   );
 end $$;
+
+-- 이전 버전에서 시각만 삭제되어 남은 위치 정보를 한 번 정리한다.
+update public.attendance_records set
+  clock_in_accuracy = null,
+  clock_in_distance = null,
+  clock_in_location_status = 'not_checked',
+  clock_in_ip_address = null,
+  clock_in_ip_matched = false
+where clock_in_at is null
+  and (clock_in_accuracy is not null or clock_in_distance is not null
+    or clock_in_location_status <> 'not_checked' or clock_in_ip_address is not null
+    or clock_in_ip_matched is true);
+
+update public.attendance_records set
+  clock_out_accuracy = null,
+  clock_out_distance = null,
+  clock_out_location_status = 'not_checked',
+  clock_out_ip_address = null,
+  clock_out_ip_matched = false
+where clock_out_at is null
+  and (clock_out_accuracy is not null or clock_out_distance is not null
+    or clock_out_location_status <> 'not_checked' or clock_out_ip_address is not null
+    or clock_out_ip_matched is true);
 
 create or replace function public.cleanup_attendance_events_after_time_clear()
 returns trigger language plpgsql security definer set search_path = public as $$

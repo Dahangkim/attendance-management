@@ -576,10 +576,30 @@ test("emergency support stays separate from attendance and time clearing is orga
   assert.match(repair, /v_record\.org_id is distinct from v_org_id/);
   assert.match(repair, /attendance_cleanup_events_after_time_clear/);
   assert.match(repair, /action_type in \('clock_in','clock_out'\)/);
+  assert.match(repair, /where clock_in_at is null/);
+  assert.match(repair, /clock_in_location_status = 'not_checked'/);
+  assert.match(repair, /where clock_out_at is null/);
+  assert.match(repair, /clock_out_location_status = 'not_checked'/);
   assert.match(install, /긴급지원 등록과 출퇴근시각 삭제 최종 보완/);
   assert.match(app, /데이터베이스의 긴급지원 유형 허용 규칙이 오래됨/);
   assert.match(app, /EMPLOYEE_NOT_FOUND/);
   assert.match(app, /EMERGENCY_SUPPORT_DISABLED/);
+});
+
+test("approved emergency support without attendance stays visible in employee and admin records", async () => {
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  assert.match(app, /approvedEmergencyRequestsWithoutAttendance/);
+  assert.match(app, /출퇴근 기록 없는 긴급지원 근무/);
+  assert.match(app, /선택한 달의 출퇴근 또는 긴급지원 기록/);
+  assert.match(app, /effectiveClockInAt/);
+  assert.match(app, /emergencyStartAt/);
+  assert.match(app, /emergencyEndAt/);
+  assert.match(app, /attendanceStatusLabel/);
+  assert.match(app, /휴일 긴급지원/);
+  assert.match(app, /approvedLeaveForRecord/);
+  assert.match(app, /recordAttendancePlaceLabel/);
+  assert.match(app, /attendanceNeedsAttention/);
+  assert.match(app, /record && effectiveClockOutAt\(record, requests\) \? formatTime/);
 });
 
 test("only public developer support is exposed and institution support stays offline", async () => {
