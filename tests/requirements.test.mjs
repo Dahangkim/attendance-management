@@ -468,6 +468,8 @@ test("audit history classifies by organization scope and keeps long values insid
   assert.ok(app.includes('superAdminOrganizationActions.has(log.action_type)'));
   assert.ok(app.includes('return "institution"'));
   assert.ok(app.includes('governanceActions.has(log.action_type)'));
+  assert.ok(app.includes('independentActions.has(log.action_type)'));
+  assert.ok(!app.includes('if (!log.org_id) return "independent"'));
   assert.ok(app.includes('"이전 기관 화면 설정"'));
   assert.ok(app.includes('"변경된 기관 화면 설정"'));
   assert.ok(css.includes(".audit-values span"));
@@ -475,6 +477,7 @@ test("audit history classifies by organization scope and keeps long values insid
   assert.match(css, /\.audit-restore-button \{[^}]*color: var\(--green-deep\)/);
   assert.doesNotMatch(css, /\.audit-restore-button \{[^}]*color: var\(--brand\)/);
   assert.ok(app.includes('className="request-category-tabs audit-category-tabs"'));
+  assert.ok(!app.includes('(superAdmin || organizationChanges.length > 0 || sourceLogs.some'));
   assert.ok(css.includes(".audit-category-tabs button.active"));
   assert.ok(css.includes("color: var(--green-contrast)"));
 });
