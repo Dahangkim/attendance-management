@@ -233,7 +233,6 @@ const exceptionDaysInMonth = (exceptions: AttendanceException[], employeeId: str
 };
 const currentDateKey = () => KST_DATE.format(new Date());
 const isAdminRole = (role: Role) => role === "admin" || role === "org_admin" || role === "super_admin";
-const isMobileOrTabletDevice = () => typeof navigator !== "undefined" && (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1));
 const isLikelyDesktop = () => {
   if (typeof navigator === "undefined") return false;
   const navigatorWithHints = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
@@ -530,7 +529,6 @@ export default function AttendanceApp() {
   const [iosInstallAvailable, setIosInstallAvailable] = useState(false);
   const [androidInstallAvailable, setAndroidInstallAvailable] = useState(false);
   const [installGuideOpen, setInstallGuideOpen] = useState(false);
-  const [adminDesktopNoticeOpen, setAdminDesktopNoticeOpen] = useState(false);
   const [holidayYear, setHolidayYear] = useState(Number(currentDateKey().slice(0, 4)) + 1);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
 
@@ -674,13 +672,6 @@ export default function AttendanceApp() {
     if (!data?.is_active) {
       await supabase.auth.signOut({ scope: "local" });
       setLoginError(data && !data.is_active ? "비활성 계정입니다. 관리자에게 문의해 주세요." : "직원 정보를 확인하지 못했습니다.");
-      return;
-    }
-    if (["admin", "org_admin"].includes(data.role) && isMobileOrTabletDevice()) {
-      setAdminDesktopNoticeOpen(true);
-      await supabase.auth.signOut({ scope: "local" });
-      setLoginError("기관관리자 계정은 데스크톱에서만 로그인할 수 있습니다.");
-      setAuthReady(true);
       return;
     }
     if (data.must_change_password) {
@@ -1272,16 +1263,13 @@ export default function AttendanceApp() {
     const response = await fetch("/api/employee-login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier, password: loginPassword, mobileDevice: isMobileOrTabletDevice() }),
+      body: JSON.stringify({ identifier, password: loginPassword }),
     }).catch(() => null);
     const result = response ? await response.json().catch(() => ({})) as { session?: { access_token: string; refresh_token: string }; organization?: TenantOrganization; code?: string } : {};
     if (!response?.ok || !result.session) {
-      if (result.code === "ADMIN_DESKTOP_REQUIRED") setAdminDesktopNoticeOpen(true);
       setLoginError(result.code === "PASSWORD_MIGRATION_FAILED"
         ? "기존 비밀번호 전환을 완료하지 못했습니다. 관리자에게 문의해 주세요."
-        : result.code === "ADMIN_DESKTOP_REQUIRED"
-          ? "기관관리자 계정은 데스크톱에서만 로그인할 수 있습니다."
-          : "사번, 이메일 또는 비밀번호를 확인해 주세요.");
+        : "사번, 이메일 또는 비밀번호를 확인해 주세요.");
       setBusy(false);
       return;
     }
@@ -2628,7 +2616,7 @@ export default function AttendanceApp() {
   }
 
   if (isSupabaseConfigured && (!authReady || Boolean(profile && !dataReady))) return <AppLoadingScreen branding={tenantBranding} />;
-  if (isSupabaseConfigured && !profile) return <><UnifiedLoginScreen branding={tenantBranding} identifier={loginIdentifier} password={loginPassword} error={loginError} busy={busy} showInstall={Boolean(installPrompt) || iosInstallAvailable || androidInstallAvailable} onInstall={() => void installApp()} onIdentifier={setLoginIdentifier} onPassword={setLoginPassword} onLogin={login} onReset={resetPassword} />{installGuideOpen && <IosInstallGuide onClose={() => setInstallGuideOpen(false)} />}{adminDesktopNoticeOpen && <AdminDesktopNotice onClose={() => setAdminDesktopNoticeOpen(false)} />}</>;
+  if (isSupabaseConfigured && !profile) return <><UnifiedLoginScreen branding={tenantBranding} identifier={loginIdentifier} password={loginPassword} error={loginError} busy={busy} showInstall={Boolean(installPrompt) || iosInstallAvailable || androidInstallAvailable} onInstall={() => void installApp()} onIdentifier={setLoginIdentifier} onPassword={setLoginPassword} onLogin={login} onReset={resetPassword} />{installGuideOpen && <IosInstallGuide onClose={() => setInstallGuideOpen(false)} />}</>;
 
   const employeeNav = [
     { id: "today" as const, label: "오늘", icon: Clock3 }, { id: "records" as const, label: "내 기록", icon: CalendarDays }, { id: "corrections" as const, label: "내 신청내역", icon: PencilLine },
@@ -3464,10 +3452,6 @@ function EmployeeEditModal({ profile, busy, onClose, onSubmit }: { profile: Prof
 function IosInstallGuide({ onClose }: { onClose: () => void }) {
   const androidDevice = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
   return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="ios-install-title"><div className="modal consent-modal ios-install-modal"><button type="button" className="modal-close" onClick={onClose} aria-label="닫기"><X /></button><div className="modal-icon"><Download /></div><span className="kicker">{androidDevice ? "안드로이드 앱 설치" : "iPhone 앱 설치"}</span><h2 id="ios-install-title">홈 화면에 추가해 주세요</h2><p>{androidDevice ? "설치창이 바로 열리지 않으면 Chrome 메뉴에서 직접 설치할 수 있습니다." : "iPhone에서는 웹사이트가 설치창을 직접 띄울 수 없습니다. 브라우저의 공유 메뉴에서 아래 순서로 설치합니다."}</p>{androidDevice ? <ol><li><strong>1</strong><span>Chrome 오른쪽 위의 <b>점 세 개 메뉴</b>를 누릅니다.</span></li><li><strong>2</strong><span><b>앱 설치</b> 또는 <b>홈 화면에 추가</b>를 선택합니다.</span></li><li><strong>3</strong><span>표시된 기관 앱 이름을 확인하고 <b>설치</b>를 누릅니다.</span></li></ol> : <ol><li><strong>1</strong><span>화면 아래 또는 위의 <b>공유</b> 버튼을 누릅니다.</span></li><li><strong>2</strong><span><b>홈 화면에 추가</b>를 선택합니다.</span></li><li><strong>3</strong><span><b>웹 앱으로 열기</b>를 켜고 <b>추가</b>를 누릅니다.</span></li></ol>}<div className="setting-info"><AlertCircle /><p>{androidDevice ? "이미 설치된 경우에는 설치 항목 대신 설치된 앱 열기가 표시될 수 있습니다." : "iOS Chrome의 공유 메뉴에 홈 화면 추가가 없다면 같은 주소를 Safari로 열어 진행해 주세요."}</p></div><div className="modal-actions"><button type="button" className="primary-button compact" onClick={onClose}><Check /> 확인</button></div></div></div>;
-}
-
-function AdminDesktopNotice({ onClose }: { onClose: () => void }) {
-  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="admin-desktop-title"><div className="modal consent-modal"><button type="button" className="modal-close" onClick={onClose} aria-label="닫기"><X /></button><div className="modal-icon"><Building2 /></div><span className="kicker">기관관리자 접속 안내</span><h2 id="admin-desktop-title">데스크톱에서 접속해 주세요</h2><p>입력한 계정은 정상적인 기관관리자 계정입니다. 기관 설정과 직원 근태자료를 안전하고 정확하게 관리하기 위해 기관관리자 화면은 데스크톱에서만 사용할 수 있습니다.</p><div className="setting-info"><AlertCircle /><p>직원 계정은 안드로이드와 iPhone에서 계속 로그인할 수 있습니다. 기관관리자는 컴퓨터의 Chrome, Edge 또는 Safari에서 같은 주소로 접속해 주세요.</p></div><div className="modal-actions"><button type="button" className="primary-button compact" onClick={onClose}><Check /> 확인</button></div></div></div>;
 }
 
 function PasswordChangeModal({ recovery, privileged, busy, onClose, onSubmit }: { recovery: boolean; privileged: boolean; busy: boolean; onClose: () => void; onSubmit: (form: HTMLFormElement) => void }) {

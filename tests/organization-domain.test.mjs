@@ -73,17 +73,13 @@ test("the shared deployment can use the configured super administrator branding"
   assert.match(context, /brand_logo_url: result\.data\.brand_logo_url/);
 });
 
-test("organization administrator login is limited to desktop devices", async () => {
+test("organization administrators can log in from mobile to request protected setting changes", async () => {
   const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
   const login = await readFile(new URL("app/api/employee-login/route.ts", root), "utf8");
-  assert.match(app, /isMobileOrTabletDevice/);
-  assert.match(app, /기관관리자 계정은 데스크톱에서만 로그인할 수 있습니다/);
-  assert.match(app, /AdminDesktopNotice/);
-  assert.match(app, /입력한 계정은 정상적인 기관관리자 계정입니다/);
-  assert.match(login, /\["admin", "org_admin"\]\.includes\(profile\.role\) && mobileDevice/);
-  assert.match(login, /ADMIN_DESKTOP_REQUIRED/);
-  assert.ok(login.indexOf("signInWithPassword") < login.indexOf("ADMIN_DESKTOP_REQUIRED"));
-  assert.doesNotMatch(login, /\["super_admin"\]\.includes\(profile\.role\) && mobileDevice/);
+  assert.doesNotMatch(app, /AdminDesktopNotice|기관관리자 계정은 데스크톱에서만/);
+  assert.doesNotMatch(login, /ADMIN_DESKTOP_REQUIRED|mobileDevice|sec-ch-ua-mobile/);
+  assert.match(app, /현재 위치 자동입력/);
+  assert.match(app, /위치 변경 승인 요청/);
 });
 
 test("administrator sidebar uses the configurable short mark without adding employee avatar settings", async () => {
@@ -119,7 +115,7 @@ test("unified login supports email without a legacy password alias or detailed r
   assert.doesNotMatch(route, /attendance:/);
   assert.doesNotMatch(route, /LOGIN_REJECTED|console\.warn/);
   assert.match(route, /const rejectLogin = \(\) => json\(\{ ok: false, code: "INVALID_CREDENTIALS" \}/);
-  assert.match(app, /body: JSON\.stringify\(\{ identifier, password: loginPassword, mobileDevice: isMobileOrTabletDevice\(\) \}\)/);
+  assert.match(app, /body: JSON\.stringify\(\{ identifier, password: loginPassword \}\)/);
 });
 
 test("employee creation assigns organization on the server", async () => {

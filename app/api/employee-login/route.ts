@@ -22,7 +22,6 @@ export async function POST(request: Request) {
       ? body.employeeNumber.trim()
       : "";
   const password = typeof body?.password === "string" ? body.password : "";
-  const mobileDevice = body?.mobileDevice === true || /Android|iPhone|iPad|iPod|Mobile/i.test(request.headers.get("user-agent") || "") || request.headers.get("sec-ch-ua-mobile") === "?1";
   const isEmail = identifier.includes("@");
   const employeeNumber = identifier.toUpperCase();
   if ((!isEmail && !/^[A-Z0-9-]{2,30}$/.test(employeeNumber)) || password.length < 1 || password.length > 200) {
@@ -60,8 +59,6 @@ export async function POST(request: Request) {
   const authClient = createServerSupabaseClient(supabaseUrl, publishableKey);
   const { data: authData, error: authError } = await authClient.auth.signInWithPassword({ email: authEmail, password: toSupabasePassword(password) });
   if (authError || !authData.session || authData.user.id !== profile.id) return rejectLogin();
-  if (["admin", "org_admin"].includes(profile.role) && mobileDevice) return json({ ok: false, code: "ADMIN_DESKTOP_REQUIRED" }, 403);
-
   return json({
     ok: true,
     organization,
