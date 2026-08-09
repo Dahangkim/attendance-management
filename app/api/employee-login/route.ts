@@ -7,10 +7,7 @@ export const dynamic = "force-dynamic";
 const ORGANIZATION_FIELDS = "id,org_code,org_name,short_name,domain,brand_title,brand_short_title,brand_description,brand_subtitle,brand_mark,brand_logo_url,brand_primary_color,brand_accent_color,brand_og_image_url";
 const responseHeaders = { "Cache-Control": "no-store" };
 const json = (body: Record<string, unknown>, status = 200) => Response.json(body, { status, headers: responseHeaders });
-const rejectLogin = (stage: string, detail = "") => {
-  console.warn("LOGIN_REJECTED", { stage, detail });
-  return json({ ok: false, code: "INVALID_CREDENTIALS" }, 401);
-};
+const rejectLogin = () => json({ ok: false, code: "INVALID_CREDENTIALS" }, 401);
 
 export async function POST(request: Request) {
   const supabaseUrl = runtimeEnv.NEXT_PUBLIC_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -29,7 +26,7 @@ export async function POST(request: Request) {
   const isEmail = identifier.includes("@");
   const employeeNumber = identifier.toUpperCase();
   if ((!isEmail && !/^[A-Z0-9-]{2,30}$/.test(employeeNumber)) || password.length < 1 || password.length > 200) {
-    return rejectLogin("invalid_input");
+    return rejectLogin();
   }
 
   const adminClient = createServerSupabaseClient(supabaseUrl, secretKey);
@@ -42,43 +39,28 @@ export async function POST(request: Request) {
     : profileQuery.ilike("employee_number", employeeNumber);
   const { data: profiles, error: profileError } = await profileQuery;
   if (profileError || profiles?.length !== 1 || !profiles[0].is_active) {
-    return rejectLogin(
-      profileError ? "profile_query" : profiles?.length !== 1 ? "profile_match" : "inactive_profile",
-      profileError ? [profileError.code, profileError.message].filter(Boolean).join(":") : "",
-    );
+    return rejectLogin();
   }
   const profile = profiles[0];
-  if (["admin", "org_admin"].includes(profile.role) && mobileDevice) {
-    return json({ ok: false, code: "ADMIN_DESKTOP_REQUIRED" }, 403);
-  }
   let organization = null;
   if (profile.role !== "super_admin") {
-    if (!profile.org_id) return rejectLogin("missing_organization");
+    if (!profile.org_id) return rejectLogin();
     const { data: activeOrganization } = await adminClient.from("organizations")
       .select(ORGANIZATION_FIELDS)
       .eq("id", profile.org_id)
       .eq("is_active", true)
       .maybeSingle();
-    if (!activeOrganization) return rejectLogin("inactive_organization");
+    if (!activeOrganization) return rejectLogin();
     organization = activeOrganization;
   }
 
   const { data: authUserData, error: authUserError } = await adminClient.auth.admin.getUserById(profile.id);
   const authEmail = authUserData.user?.email;
-  if (authUserError || !authEmail) return rejectLogin("auth_user", authUserError?.code || "");
+  if (authUserError || !authEmail) return rejectLogin();
   const authClient = createServerSupabaseClient(supabaseUrl, publishableKey);
-  let usedLegacyPassword = false;
-  let { data: authData, error: authError } = await authClient.auth.signInWithPassword({ email: authEmail, password: toSupabasePassword(password) });
-  if (authError && password.length >= 4 && password.length < 6) {
-    ({ data: authData, error: authError } = await authClient.auth.signInWithPassword({ email: authEmail, password: `attendance:${password}` }));
-    usedLegacyPassword = !authError && Boolean(authData.session);
-  }
-  if (authError || !authData.session || authData.user.id !== profile.id) return rejectLogin("password", authError?.code || "");
-
-  if (usedLegacyPassword) {
-    const { error: migrationError } = await adminClient.from("profiles").update({ must_change_password: true }).eq("id", profile.id);
-    if (migrationError) return json({ ok: false, code: "PASSWORD_MIGRATION_FAILED" }, 500);
-  }
+  const { data: authData, error: authError } = await authClient.auth.signInWithPassword({ email: authEmail, password: toSupabasePassword(password) });
+  if (authError || !authData.session || authData.user.id !== profile.id) return rejectLogin();
+  if (["admin", "org_admin"].includes(profile.role) && mobileDevice) return json({ ok: false, code: "ADMIN_DESKTOP_REQUIRED" }, 403);
 
   return json({
     ok: true,

@@ -249,7 +249,6 @@ revoke all on function public.finish_emergency_support_work(uuid,text) from publ
 revoke all on function public.review_emergency_support_work(uuid,text,text) from public,anon;
 revoke all on function public.admin_reopen_overtime_review(uuid,text) from public,anon;
 revoke all on function public.admin_create_emergency_support_work(uuid,date,date,time,time,text) from public,anon;
-grant execute on function public.emergency_support_time_overlaps(uuid,date,date,time,time,uuid) to authenticated;
 grant execute on function public.start_emergency_support_work(text) to authenticated;
 grant execute on function public.finish_emergency_support_work(uuid,text) to authenticated;
 grant execute on function public.review_emergency_support_work(uuid,text,text) to authenticated;

@@ -249,7 +249,6 @@ revoke all on function public.admin_create_emergency_support_work(uuid,date,date
 revoke all on function public.admin_update_attendance(uuid,time,time,text,text,text,text) from public,anon;
 revoke all on function public.cleanup_attendance_events_after_time_clear() from public,anon,authenticated;
 grant execute on function public.calculate_emergency_support_minutes(date,date,time,time) to authenticated;
-grant execute on function public.emergency_support_time_overlaps(uuid,date,date,time,time,uuid) to authenticated;
 grant execute on function public.admin_create_emergency_support_work(uuid,date,date,time,time,text) to authenticated;
 grant execute on function public.admin_update_attendance(uuid,time,time,text,text,text,text) to authenticated;
 

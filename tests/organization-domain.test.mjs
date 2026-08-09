@@ -82,6 +82,7 @@ test("organization administrator login is limited to desktop devices", async () 
   assert.match(app, /입력한 계정은 정상적인 기관관리자 계정입니다/);
   assert.match(login, /\["admin", "org_admin"\]\.includes\(profile\.role\) && mobileDevice/);
   assert.match(login, /ADMIN_DESKTOP_REQUIRED/);
+  assert.ok(login.indexOf("signInWithPassword") < login.indexOf("ADMIN_DESKTOP_REQUIRED"));
   assert.doesNotMatch(login, /\["super_admin"\]\.includes\(profile\.role\) && mobileDevice/);
 });
 
@@ -110,14 +111,14 @@ test("employee login resolves the organization from a globally unique employee n
   assert.match(app, /기관별 접속 도메인, 선택/);
 });
 
-test("unified login supports email and safely migrates legacy short passwords", async () => {
+test("unified login supports email without a legacy password alias or detailed rejection logs", async () => {
   const route = await readFile(new URL("app/api/employee-login/route.ts", root), "utf8");
   const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
   assert.match(route, /body\?\.identifier/);
   assert.match(route, /profileQuery\.ilike\("email", identifier\)/);
-  assert.match(route, /password: `attendance:\$\{password\}`/);
-  assert.match(route, /update\(\{ must_change_password: true \}\)/);
-  assert.doesNotMatch(route, /authError && profile\.must_change_password/);
+  assert.doesNotMatch(route, /attendance:/);
+  assert.doesNotMatch(route, /LOGIN_REJECTED|console\.warn/);
+  assert.match(route, /const rejectLogin = \(\) => json\(\{ ok: false, code: "INVALID_CREDENTIALS" \}/);
   assert.match(app, /body: JSON\.stringify\(\{ identifier, password: loginPassword, mobileDevice: isMobileOrTabletDevice\(\) \}\)/);
 });
 
@@ -556,18 +557,25 @@ test("organization administrators review overtime only inside their organization
   assert.match(sql, /correction_request_id,org_id/);
 });
 
-test("employee login keeps raw passwords and securely migrates legacy short passwords", async () => {
+test("employee login keeps raw passwords without accepting a hidden short-password alias", async () => {
   const route = await readFile(new URL("app/api/employee-login/route.ts", root), "utf8");
   const password = await readFile(new URL("lib/auth-password.ts", root), "utf8");
   assert.match(route, /password\.length < 1/);
   assert.match(route, /\.ilike\("employee_number", employeeNumber\)/);
   assert.match(route, /toSupabasePassword\(password\)/);
-  assert.match(route, /authError && password\.length >= 4 && password\.length < 6/);
-  assert.match(route, /if \(usedLegacyPassword\)/);
-  assert.match(route, /update\(\{ must_change_password: true \}\)/);
+  assert.doesNotMatch(route, /password\.length >= 4 && password\.length < 6/);
+  assert.doesNotMatch(route, /usedLegacyPassword|attendance:/);
   assert.match(password, /return password;/);
   assert.doesNotMatch(password, /attendance:/);
   assert.doesNotMatch(route, /!profiles\[0\]\.email/);
+});
+
+test("authentication repair keeps password completion self-scoped and emergency overlap internal", async () => {
+  const repair = await readFile(new URL("supabase/repair_auth_information_leaks.sql", root), "utf8");
+  assert.match(repair, /complete_required_password_change\(\)[\s\S]*security definer/);
+  assert.match(repair, /where id = auth\.uid\(\)/);
+  assert.match(repair, /revoke all on function public\.emergency_support_time_overlaps[\s\S]*from public,anon,authenticated/);
+  assert.doesNotMatch(repair, /grant execute on function public\.emergency_support_time_overlaps/);
 });
 
 test("secure clock uses organization holidays and keeps generated PC diagnostics out of notes", async () => {
