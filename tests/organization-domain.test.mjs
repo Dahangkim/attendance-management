@@ -164,6 +164,21 @@ test("organization settings keep save actions with their sections and hide raw l
   assert.doesNotMatch(app, />로고 주소<input/);
 });
 
+test("each organization can hide new emergency support actions without deleting history", async () => {
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  const types = await readFile(new URL("lib/types.ts", root), "utf8");
+  const migration = await readFile(new URL("supabase/add_emergency_support_feature_toggle.sql", root), "utf8");
+  assert.match(types, /emergency_support_enabled: boolean/);
+  assert.match(app, /긴급지원 기능 사용/);
+  assert.match(app, /기존 기록만 보존합니다/);
+  assert.match(app, /emergencySupportEnabled \&\& <button className="primary-button compact"/);
+  assert.match(app, /emergencySupportEnabled \|\| activeEmergencyRequest/);
+  assert.match(migration, /add column if not exists emergency_support_enabled boolean not null default true/);
+  assert.match(migration, /EMERGENCY_SUPPORT_DISABLED/);
+  assert.match(migration, /before insert on public\.correction_requests/);
+  assert.match(migration, /where org_id = v_org_id/);
+});
+
 test("all employee-scoped tables receive organization isolation", async () => {
   const sql = await readFile(new URL("supabase/upgrade_multi_org_isolation.sql", root), "utf8");
   for (const table of ["employee_schedule_overrides", "attendance_locations", "location_consents", "attendance_events", "attendance_exceptions", "comp_time_credits", "comp_time_usage_allocations", "annual_leave_entitlements"]) {

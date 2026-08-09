@@ -194,6 +194,7 @@ export interface OrganizationSettings {
   late_grace_minutes: number;
   early_leave_grace_minutes: number;
   office_ip_address: string;
+  emergency_support_enabled: boolean;
 }
 
 export interface OrganizationWorkPolicy {

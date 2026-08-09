@@ -47,6 +47,7 @@ create table if not exists public.organization_settings (
   late_grace_minutes integer not null default 0 check (late_grace_minutes between 0 and 180),
   early_leave_grace_minutes integer not null default 0 check (early_leave_grace_minutes between 0 and 180),
   office_ip_address text not null default '',
+  emergency_support_enabled boolean not null default true,
   work_days smallint[] not null default array[1,2,3,4,5],
   updated_by uuid references public.profiles(id),
   updated_at timestamptz not null default now()
