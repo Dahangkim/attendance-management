@@ -642,6 +642,18 @@ test("approved emergency support without attendance stays visible in employee an
   assert.match(app, /record && effectiveClockOutAt\(record, requests\) \? formatTime/);
 });
 
+test("holiday overtime keeps full elapsed time, stays separate from emergency support, and weekly 12 hours is notice only", async () => {
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  const repair = await readFile(new URL("supabase/repair_weekly_overtime_notice_and_emergency_cancel.sql", root), "utf8");
+  assert.doesNotMatch(app, /finishedEmergencyMinutesForRecord/);
+  assert.match(app, /참고용 안내이며 승인은 그대로 처리됐습니다/);
+  assert.match(app, /당직/);
+  assert.match(repair, /case when v_is_holiday then 0 else v_lunch end/);
+  assert.match(repair, /recorded_overtime_minutes between 0 and 1440/);
+  assert.match(repair, /admin_cancel_emergency_support_work/);
+  assert.match(repair, /emergency_support_approval_cancelled/);
+});
+
 test("only public developer support is exposed and institution support stays offline", async () => {
   const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
   const owner = await readFile(new URL("lib/application-owner.ts", root), "utf8");
