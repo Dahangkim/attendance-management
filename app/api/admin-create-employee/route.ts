@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   const name = typeof body?.name === "string" ? body.name.trim() : "";
   const department = typeof body?.department === "string" ? body.department.trim() : "";
   const password = typeof body?.password === "string" ? body.password : "";
-  if (name.length < 2 || name.length > 30 || department.length > 50 || password.length < 4) {
+  if (name.length < 2 || name.length > 30 || department.length > 50 || password.length < 6) {
     return json({ ok: false, code: "INVALID_INPUT" }, 400);
   }
 

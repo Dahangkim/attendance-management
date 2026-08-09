@@ -43,13 +43,17 @@ test("super admin migration keeps history and disables the previous account", as
 test("signed-in users can change their own password", async () => {
   const app = await read("app/attendance-app.tsx");
   const route = await read("app/api/admin-reset-password/route.ts");
+  const password = await read("lib/auth-password.ts");
   assert.ok(app.includes("PasswordChangeModal"));
   assert.ok(app.includes("현재 비밀번호"));
   assert.ok(app.includes("supabase.auth.updateUser({ password: toSupabasePassword(newPassword) })"));
   assert.ok(app.includes('event === "PASSWORD_RECOVERY"'));
-  assert.ok(app.includes("newPassword.length < 4"));
-  assert.ok(app.includes("minLength={4}"));
-  assert.ok(route.includes("password.length < 4"));
+  assert.ok(app.includes("newPassword.length < 6"));
+  assert.ok(app.includes("isPrivilegedPassword(newPassword)"));
+  assert.ok(app.includes('supabase.rpc("complete_required_password_change")'));
+  assert.ok(route.includes("password.length < 6"));
+  assert.ok(password.includes("PRIVILEGED_PASSWORD_MIN_LENGTH = 8"));
+  assert.ok(password.includes("/[^A-Za-z0-9]/"));
 });
 
 test("password results stay visible as a fixed seven-second notice", async () => {
@@ -356,7 +360,8 @@ test("any year of Korean holidays can be refreshed and manually managed", async 
   assert.ok(app.includes("기관 휴일 직접 추가"));
   assert.ok(app.includes("editHoliday"));
   assert.ok(app.includes("removeHoliday"));
-  assert.ok(app.includes('from("holidays").delete()'));
+  assert.ok(app.includes('from("organization_holidays").delete()'));
+  assert.ok(app.includes('onConflict: "org_id,holiday_date"'));
   assert.ok(route.includes("ko.south_korea%23holiday"));
   assert.ok(route.includes('split("BEGIN:VEVENT")'));
   assert.ok(route.includes('!== "공휴일"'));

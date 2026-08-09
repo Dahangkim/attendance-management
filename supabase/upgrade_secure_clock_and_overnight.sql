@@ -119,7 +119,7 @@ begin
   ) then raise exception 'MONTH_CLOSED'; end if;
 
   v_is_regular_workday := extract(isodow from v_work_date)::smallint = any(v_settings.work_days)
-    and not exists (select 1 from public.holidays where holiday_date = v_work_date);
+    and not exists (select 1 from public.organization_holidays where org_id = v_user.org_id and holiday_date = v_work_date);
 
   insert into public.attendance_events (employee_id, work_date, action_type, idempotency_key)
   values (p_employee_id, v_work_date, p_action, p_idempotency_key);

@@ -33,6 +33,7 @@ export interface Profile {
   department: string;
   is_active: boolean;
   can_view_reports?: boolean;
+  must_change_password?: boolean;
   org_id?: string;
   brand_title?: string | null;
   brand_description?: string | null;
@@ -246,6 +247,7 @@ export interface OrganizationChangeRequest {
 }
 
 export interface Holiday {
+  org_id?: string;
   holiday_date: string;
   holiday_name: string;
   is_paid_holiday: boolean;

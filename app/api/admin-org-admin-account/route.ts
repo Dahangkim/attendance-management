@@ -1,7 +1,7 @@
 import { runtimeEnv } from "../_lib/runtime-env";
 import { authenticatedAdmin } from "../_lib/admin-auth";
 import { createServerSupabaseClient } from "../_lib/server-supabase";
-import { toSupabasePassword } from "../../../lib/auth-password";
+import { isPrivilegedPassword, toSupabasePassword } from "../../../lib/auth-password";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +29,7 @@ export async function PATCH(request: Request) {
   const requestedEmail = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
   const department = typeof body?.department === "string" ? body.department.trim() : "";
   const password = typeof body?.password === "string" ? body.password : "";
-  if (!validUserId(userId) || name.length < 2 || name.length > 30 || !/^[A-Z0-9-]{2,24}$/.test(employeeNumber) || requestedEmail && !/^\S+@\S+\.\S+$/.test(requestedEmail) || department.length > 50 || (password && password.length < 4)) {
+  if (!validUserId(userId) || name.length < 2 || name.length > 30 || !/^[A-Z0-9-]{2,24}$/.test(employeeNumber) || requestedEmail && !/^\S+@\S+\.\S+$/.test(requestedEmail) || department.length > 50 || (password && !isPrivilegedPassword(password))) {
     return json({ ok: false, code: "INVALID_INPUT" }, 400);
   }
 

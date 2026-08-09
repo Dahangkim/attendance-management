@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
   const adminClient = createServerSupabaseClient(supabaseUrl, secretKey);
   const { data: profiles, error: profileError } = await adminClient.from("profiles")
-    .select("id,email,is_active,org_id,role")
+    .select("id,email,is_active,org_id,role,must_change_password")
     .ilike("employee_number", employeeNumber)
     .in("role", ["employee", "team_lead", "org_admin", "admin", "super_admin"])
     .limit(2);
@@ -47,10 +47,9 @@ export async function POST(request: Request) {
   const authEmail = authUserData.user?.email;
   if (authUserError || !authEmail) return json({ ok: false, code: "INVALID_CREDENTIALS" }, 401);
   const authClient = createServerSupabaseClient(supabaseUrl, publishableKey);
-  const storedPassword = toSupabasePassword(password);
-  let { data: authData, error: authError } = await authClient.auth.signInWithPassword({ email: authEmail, password: storedPassword });
-  if (authError && storedPassword !== password) {
-    ({ data: authData, error: authError } = await authClient.auth.signInWithPassword({ email: authEmail, password }));
+  let { data: authData, error: authError } = await authClient.auth.signInWithPassword({ email: authEmail, password: toSupabasePassword(password) });
+  if (authError && profile.must_change_password && password.length >= 4 && password.length < 6) {
+    ({ data: authData, error: authError } = await authClient.auth.signInWithPassword({ email: authEmail, password: `attendance:${password}` }));
   }
   if (authError || !authData.session || authData.user.id !== profile.id) return json({ ok: false, code: "INVALID_CREDENTIALS" }, 401);
 

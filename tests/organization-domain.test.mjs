@@ -315,7 +315,7 @@ test("employee number changes keep login connected to the existing auth account"
   const route = await readFile(new URL("app/api/employee-login/route.ts", root), "utf8");
   assert.match(route, /getUserById\(profile\.id\)/);
   assert.match(route, /const authEmail = authUserData\.user\?\.email/);
-  assert.match(route, /signInWithPassword\(\{ email: authEmail, password \}\)/);
+  assert.match(route, /signInWithPassword\(\{ email: authEmail, password: toSupabasePassword\(password\) \}\)/);
 });
 
 test("super administrators can edit employee numbers for the selected organization", async () => {
@@ -464,21 +464,34 @@ test("organization administrators review overtime only inside their organization
   assert.match(sql, /correction_request_id,org_id/);
 });
 
-test("employee number login accepts existing short passwords and case-insensitive numbers", async () => {
+test("employee number login no longer aliases short passwords and keeps case-insensitive numbers", async () => {
   const route = await readFile(new URL("app/api/employee-login/route.ts", root), "utf8");
   const password = await readFile(new URL("lib/auth-password.ts", root), "utf8");
   assert.match(route, /password\.length < 1/);
   assert.match(route, /\.ilike\("employee_number", employeeNumber\)/);
   assert.match(route, /toSupabasePassword\(password\)/);
-  assert.match(password, /password\.length >= 4 && password\.length < 6/);
+  assert.match(route, /profile\.must_change_password && password\.length >= 4 && password\.length < 6/);
+  assert.match(password, /return password;/);
+  assert.doesNotMatch(password, /attendance:/);
   assert.doesNotMatch(route, /!profiles\[0\]\.email/);
 });
 
-test("secure clock uses global holidays and keeps generated PC diagnostics out of notes", async () => {
+test("secure clock uses organization holidays and keeps generated PC diagnostics out of notes", async () => {
   const sql = await readFile(new URL("supabase/upgrade_secure_clock_and_overnight.sql", root), "utf8");
-  assert.match(sql, /public\.holidays where holiday_date = v_work_date/);
-  assert.doesNotMatch(sql, /public\.holidays where org_id = v_user\.org_id/);
+  assert.match(sql, /public\.organization_holidays where org_id = v_user\.org_id and holiday_date = v_work_date/);
   assert.match(sql, /사무실 PC에서 기록, 위치 측정 오차/);
   assert.match(sql, /v_record_note/);
   assert.match(sql, /update public\.attendance_records\s+set note = trim\(regexp_replace/);
+});
+
+test("security hardening isolates settings, closings, workplaces, and organization holidays", async () => {
+  const sql = await readFile(new URL("supabase/security_hardening_multi_org.sql", root), "utf8");
+  for (const table of ["organization_holidays", "workplaces", "organization_settings", "monthly_closings"]) assert.match(sql, new RegExp(table));
+  assert.match(sql, /org_id = public\.current_profile_org_id\(\)/);
+  assert.match(sql, /where org_id = v_org_id and is_active/);
+  assert.doesNotMatch(sql, /where is_active = true\s+returning/);
+  assert.match(sql, /primary key \(org_id, holiday_date\)/);
+  assert.match(sql, /super admin manages statutory holidays/);
+  assert.match(sql, /update public\.profiles set must_change_password = true where is_active/);
+  assert.match(sql, /complete_required_password_change/);
 });

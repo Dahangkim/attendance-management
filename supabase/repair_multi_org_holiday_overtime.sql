@@ -33,7 +33,7 @@ begin
     v_leave := public.approved_leave_minutes_during_attendance(new.employee_id,new.clock_in_at,new.clock_out_at);
     v_actual := greatest(0,v_worked - v_lunch - v_leave);
     v_is_holiday := extract(isodow from new.work_date)::smallint <> all(v_settings.work_days)
-      or exists (select 1 from public.holidays where holiday_date = new.work_date);
+      or exists (select 1 from public.organization_holidays where org_id = new.org_id and holiday_date = new.work_date);
     v_raw := case when v_is_holiday then v_actual else greatest(0,v_actual - 480) end;
     v_recognized := case
       when v_is_holiday and coalesce(v_policy.holiday_work_counts_as_overtime,true)
@@ -80,7 +80,7 @@ begin
     return case when v_leave_type in ('annual_leave','half_day','quarter_day','hourly_leave','sick_leave') then v_leave_type when p_record.attendance_status in ('business_trip','leave') then p_record.attendance_status else 'missing_in' end;
   end if;
   v_is_regular_workday := extract(isodow from p_record.work_date)::smallint = any(v_settings.work_days)
-    and not exists (select 1 from public.holidays where holiday_date = p_record.work_date and is_paid_holiday);
+    and not exists (select 1 from public.organization_holidays where org_id = p_record.org_id and holiday_date = p_record.work_date and is_paid_holiday);
   v_location_review := (p_record.clock_in_location_status in ('outside','low_accuracy') and not coalesce(p_record.clock_in_ip_matched,false))
     or (p_record.clock_out_at is not null and p_record.clock_out_location_status in ('outside','low_accuracy') and not coalesce(p_record.clock_out_ip_matched,false));
   if v_location_review then return 'admin_review'; end if;

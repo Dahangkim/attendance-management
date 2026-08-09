@@ -13,7 +13,7 @@ import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { deploymentBrandingSource } from "../lib/deployment-branding";
 import { DEFAULT_ACCENT_COLOR, DEFAULT_PRIMARY_COLOR, organizationBranding, type OrganizationBranding, type OrganizationBrandingSource } from "../lib/organization-branding";
 import { applicationOwner } from "../lib/application-owner";
-import { toSupabasePassword } from "../lib/auth-password";
+import { isPrivilegedPassword, toSupabasePassword } from "../lib/auth-password";
 import {
   LOCATION_LABEL, STATUS_LABEL, type AttendanceException, type AttendanceRecord,
   type AnnualLeaveBalance, type AuditLog, type CompTimeBalance, type CompTimeCredit, type CorrectionRequest, type EmployeeShiftAssignment, type Holiday, type MonthlyOvertimeAfterComp, type Organization, type OrganizationChangeRequest, type OrganizationSettings, type OrganizationWorkPolicy, type Profile,
@@ -618,6 +618,10 @@ export default function AttendanceApp() {
       setLoginError(data && !data.is_active ? "비활성 계정입니다. 관리자에게 문의해 주세요." : "직원 정보를 확인하지 못했습니다.");
       return;
     }
+    if (data.must_change_password) {
+      setPasswordRecovery(true);
+      setPasswordOpen(true);
+    }
     if (data.role !== "super_admin") {
       const { data: organization } = await supabase.from("organizations").select("id,org_code,org_name,short_name,domain,is_active,brand_title,brand_short_title,brand_description,brand_subtitle,brand_mark,brand_logo_url,brand_primary_color,brand_accent_color,brand_og_image_url").eq("id", data.org_id).maybeSingle();
       if (!organization?.is_active) {
@@ -753,8 +757,8 @@ export default function AttendanceApp() {
     if (reviewNote.trim().length < 2) return;
     let temporaryPassword = "";
     if (decision === "approved" && request.request_type === "org_admin_account" && request.action === "replace") {
-      temporaryPassword = window.prompt("새 기관관리자의 임시 비밀번호를 숫자 4자리 이상 입력해 주세요.") || "";
-      if (temporaryPassword.length < 4) { setNotice({ tone: "warning", text: "임시 비밀번호는 4자 이상이어야 합니다." }); return; }
+      temporaryPassword = window.prompt("새 기관관리자의 임시 비밀번호를 8자 이상, 영문, 숫자, 특수문자 조합으로 입력해 주세요.") || "";
+      if (!isPrivilegedPassword(temporaryPassword)) { setNotice({ tone: "warning", text: "기관관리자 임시 비밀번호는 8자 이상이며 영문, 숫자, 특수문자를 모두 포함해야 합니다." }); return; }
     }
     setBusy(true);
     const { data: sessionData } = await supabase.auth.getSession();
@@ -809,8 +813,8 @@ export default function AttendanceApp() {
     const data = new FormData(form);
     const password = String(data.get("password") || "");
     const confirmPassword = String(data.get("confirm_password") || "");
-    if (password.length < 4 || password !== confirmPassword) {
-      setNotice({ tone: "warning", text: "임시 비밀번호는 4자 이상이며 확인값과 같아야 합니다." });
+    if (!isPrivilegedPassword(password) || password !== confirmPassword) {
+      setNotice({ tone: "warning", text: "기관관리자 임시 비밀번호는 8자 이상 영문, 숫자, 특수문자 조합이며 확인값과 같아야 합니다." });
       return;
     }
     setBusy(true);
@@ -841,8 +845,8 @@ export default function AttendanceApp() {
     const data = new FormData(form);
     const password = String(data.get("password") || "");
     const confirmPassword = String(data.get("confirm_password") || "");
-    if (password && (password.length < 4 || password !== confirmPassword)) {
-      setNotice({ tone: "warning", text: "새 비밀번호는 4자 이상이며 확인값과 같아야 합니다." });
+    if (password && (!isPrivilegedPassword(password) || password !== confirmPassword)) {
+      setNotice({ tone: "warning", text: "기관관리자 새 비밀번호는 8자 이상 영문, 숫자, 특수문자 조합이며 확인값과 같아야 합니다." });
       return false;
     }
     setBusy(true);
@@ -1234,7 +1238,7 @@ export default function AttendanceApp() {
     const currentPassword = String(data.get("current_password") || "");
     const newPassword = String(data.get("new_password") || "");
     const confirmPassword = String(data.get("confirm_password") || "");
-    if (newPassword.length < 4) { setNotice({ tone: "warning", text: "새 비밀번호는 4자 이상 입력해 주세요." }); return; }
+    if (isAdminRole(effectiveRole) ? !isPrivilegedPassword(newPassword) : newPassword.length < 6) { setNotice({ tone: "warning", text: isAdminRole(effectiveRole) ? "관리자 비밀번호는 8자 이상이며 영문, 숫자, 특수문자를 모두 포함해야 합니다." : "새 비밀번호는 6자 이상 입력해 주세요." }); return; }
     if (newPassword !== confirmPassword) { setNotice({ tone: "warning", text: "새 비밀번호 확인이 일치하지 않습니다." }); return; }
     setBusy(true);
     if (!passwordRecovery) {
@@ -1252,6 +1256,12 @@ export default function AttendanceApp() {
       setNotice({ tone: "error", text: weakPassword ? "현재 Supabase 프로젝트의 비밀번호 기준을 충족하지 못했습니다. 다른 비밀번호로 다시 시도해 주세요." : "비밀번호를 변경하지 못했습니다. 다른 비밀번호로 다시 시도해 주세요." });
       return;
     }
+    const { error: completionError } = await supabase.rpc("complete_required_password_change");
+    if (completionError) {
+      setNotice({ tone: "error", text: "비밀번호는 변경됐지만 필수 변경 상태를 완료하지 못했습니다. 다시 로그인한 뒤 한 번 더 변경해 주세요." });
+      return;
+    }
+    setProfile((profile) => profile ? { ...profile, must_change_password: false } : profile);
     form.reset();
     setNotice({ tone: "success", text: "비밀번호가 변경되었습니다. 다음 로그인부터 새 비밀번호를 사용하세요." });
     setPasswordOpen(false);
@@ -1264,7 +1274,7 @@ export default function AttendanceApp() {
     const adminPassword = String(data.get("admin_password") || "");
     const newPassword = String(data.get("new_password") || "");
     const confirmPassword = String(data.get("confirm_password") || "");
-    if (newPassword.length < 4) { setNotice({ tone: "warning", text: "직원 임시 비밀번호는 4자 이상 입력해 주세요." }); return; }
+    if (newPassword.length < 6) { setNotice({ tone: "warning", text: "직원 임시 비밀번호는 6자 이상 입력해 주세요." }); return; }
     if (newPassword !== confirmPassword) { setNotice({ tone: "warning", text: "임시 비밀번호 확인이 일치하지 않습니다." }); return; }
     setBusy(true);
     const { error: verifyError } = await signInWithCompatiblePassword(supabase, currentProfile.email, adminPassword);
@@ -1301,7 +1311,7 @@ export default function AttendanceApp() {
     const adminPassword = String(data.get("admin_password") || "");
     const password = String(data.get("password") || "");
     const confirmPassword = String(data.get("confirm_password") || "");
-    if (password.length < 4 || password !== confirmPassword) { setNotice({ tone: "warning", text: "임시 비밀번호는 4자 이상이며 확인값과 같아야 합니다." }); return; }
+    if (password.length < 6 || password !== confirmPassword) { setNotice({ tone: "warning", text: "직원 임시 비밀번호는 6자 이상이며 확인값과 같아야 합니다." }); return; }
     setBusy(true);
     const { error: verifyError } = await signInWithCompatiblePassword(supabase, currentProfile.email, adminPassword);
     if (verifyError) { setBusy(false); setNotice({ tone: "error", text: "관리자 비밀번호가 맞지 않습니다." }); return; }
@@ -1329,7 +1339,7 @@ export default function AttendanceApp() {
     const password = String(data.get("password") || "");
     const confirmPassword = String(data.get("confirm_password") || "");
     if (!/^[A-Z0-9-]{2,30}$/.test(employeeNumber)) { setNotice({ tone: "warning", text: "사번은 영문, 숫자, 하이픈만 사용할 수 있습니다." }); return; }
-    if (password && (password.length < 4 || password !== confirmPassword)) { setNotice({ tone: "warning", text: "새 임시 비밀번호는 4자 이상이며 확인값과 같아야 합니다." }); return; }
+    if (password && (password.length < 6 || password !== confirmPassword)) { setNotice({ tone: "warning", text: "새 임시 비밀번호는 6자 이상이며 확인값과 같아야 합니다." }); return; }
     setBusy(true);
     const { data: sessionData } = await supabase.auth.getSession();
     const response = await fetch("/api/admin-employee-account", {
@@ -1984,7 +1994,7 @@ export default function AttendanceApp() {
 
   async function loadHolidays(year: number) {
     if (!supabase) return;
-    const { data, error } = await supabase.from("holidays").select("holiday_date,holiday_name,is_paid_holiday").gte("holiday_date", `${year}-01-01`).lte("holiday_date", `${year}-12-31`).order("holiday_date");
+    const { data, error } = await supabase.from("organization_holidays").select("org_id,holiday_date,holiday_name,is_paid_holiday").gte("holiday_date", `${year}-01-01`).lte("holiday_date", `${year}-12-31`).order("holiday_date");
     if (!error) setHolidays((data || []) as Holiday[]);
   }
 
@@ -2009,7 +2019,9 @@ export default function AttendanceApp() {
       if (!response.ok || !result.holidays?.length) { setNotice({ tone: "error", text: `${year}년 공휴일을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.` }); return; }
       const preview = result.holidays.map((holiday) => `${holiday.holiday_date} ${holiday.holiday_name}`).join("\n");
       if (!window.confirm(`${year}년 공휴일 ${result.holidays.length}건을 현재 목록에 보완할까요?\n\n${preview}\n\n이미 저장된 날짜는 최신 이름으로 갱신되고, 기관이 직접 추가한 다른 날짜는 유지됩니다.`)) return;
-      const { error } = await supabase.from("holidays").upsert(result.holidays, { onConflict: "holiday_date" });
+      const orgId = currentProfile?.org_id;
+      if (!orgId) throw new Error("ORGANIZATION_REQUIRED");
+      const { error } = await supabase.from("organization_holidays").upsert(result.holidays.map((holiday) => ({ ...holiday, org_id: orgId, created_by: currentProfile.id })), { onConflict: "org_id,holiday_date" });
       if (error) { setNotice({ tone: "error", text: `공휴일을 저장하지 못했습니다${error.code ? ` (오류코드 ${error.code})` : ""}. 관리자 권한을 확인해 주세요.` }); return; }
       await loadHolidays(year);
       setNotice({ tone: "success", text: `${year}년 공휴일 ${result.holidays.length}건으로 목록을 보완했습니다.` });
@@ -2022,7 +2034,7 @@ export default function AttendanceApp() {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
     const name = window.prompt("기관 휴일 이름을 입력해 주세요. 예: 기관 지정 휴일") || "";
     if (name.trim().length < 2) return;
-    const { error } = await supabase.from("holidays").upsert({ holiday_date: date, holiday_name: name.trim(), is_paid_holiday: true }, { onConflict: "holiday_date" });
+    const { error } = await supabase.from("organization_holidays").upsert({ org_id: currentProfile?.org_id, holiday_date: date, holiday_name: name.trim(), is_paid_holiday: true, created_by: currentProfile?.id }, { onConflict: "org_id,holiday_date" });
     if (!error) { const year = Number(date.slice(0, 4)); setHolidayYear(year); await loadHolidays(year); }
     setNotice(error ? { tone: "error", text: `기관 휴일을 저장하지 못했습니다${error.code ? ` (오류코드 ${error.code})` : ""}.` } : { tone: "success", text: `${date} ${name.trim()}을 기관 휴일로 저장했습니다.` });
   }
@@ -2030,7 +2042,7 @@ export default function AttendanceApp() {
   async function removeHoliday(holiday: Holiday) {
     if (!supabase || !currentProfile || !isAdminRole(currentProfile.role)) return;
     if (!window.confirm(`${holiday.holiday_date} ${holiday.holiday_name}을 휴일 목록에서 취소할까요?\n\n취소한 날짜는 근무일로 다시 계산됩니다.`)) return;
-    const { error } = await supabase.from("holidays").delete().eq("holiday_date", holiday.holiday_date);
+    const { error } = await supabase.from("organization_holidays").delete().eq("org_id", currentProfile?.org_id || "").eq("holiday_date", holiday.holiday_date);
     if (!error) await loadHolidays(holidayYear);
     setNotice(error ? { tone: "error", text: `휴일을 취소하지 못했습니다${error.code ? ` (오류코드 ${error.code})` : ""}.` } : { tone: "success", text: `${holiday.holiday_date} 휴일 지정을 취소했습니다.` });
   }
@@ -2041,10 +2053,10 @@ export default function AttendanceApp() {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(nextDate)) return;
     const nextName = window.prompt("휴일 이름을 수정해 주세요.", holiday.holiday_name) || "";
     if (nextName.trim().length < 2) return;
-    const { error: saveError } = await supabase.from("holidays").upsert({ holiday_date: nextDate, holiday_name: nextName.trim(), is_paid_holiday: true }, { onConflict: "holiday_date" });
+    const { error: saveError } = await supabase.from("organization_holidays").upsert({ org_id: currentProfile?.org_id, holiday_date: nextDate, holiday_name: nextName.trim(), is_paid_holiday: true, created_by: currentProfile?.id }, { onConflict: "org_id,holiday_date" });
     if (saveError) { setNotice({ tone: "error", text: `휴일을 수정하지 못했습니다${saveError.code ? ` (오류코드 ${saveError.code})` : ""}.` }); return; }
     if (nextDate !== holiday.holiday_date) {
-      const { error: removeOldError } = await supabase.from("holidays").delete().eq("holiday_date", holiday.holiday_date);
+      const { error: removeOldError } = await supabase.from("organization_holidays").delete().eq("org_id", currentProfile?.org_id || "").eq("holiday_date", holiday.holiday_date);
       if (removeOldError) { setNotice({ tone: "warning", text: "새 날짜는 저장했지만 이전 날짜를 지우지 못했습니다. 목록에서 이전 날짜를 직접 취소해 주세요." }); return; }
     }
     const year = Number(nextDate.slice(0, 4)); setHolidayYear(year); await loadHolidays(year);
@@ -2296,7 +2308,7 @@ export default function AttendanceApp() {
     let exportHolidays = holidays.filter((holiday) => holiday.holiday_date >= exportMonthStart && holiday.holiday_date < exportMonthEnd);
     const compTimeSources = new Map<string, string[]>();
     if (supabase) {
-      const { data } = await supabase.from("holidays").select("holiday_date,holiday_name,is_paid_holiday").gte("holiday_date", exportMonthStart).lt("holiday_date", exportMonthEnd).order("holiday_date");
+      const { data } = await supabase.from("organization_holidays").select("org_id,holiday_date,holiday_name,is_paid_holiday").gte("holiday_date", exportMonthStart).lt("holiday_date", exportMonthEnd).order("holiday_date");
       if (data) exportHolidays = data as Holiday[];
       const compRequestIds = requests.filter((request) => request.status === "approved" && request.request_type === "comp_time" && request.target_date < exportMonthEnd && (request.end_date || request.target_date) >= exportMonthStart).map((request) => request.id);
       if (compRequestIds.length > 0) {
@@ -2621,7 +2633,7 @@ function OrganizationManagement({ organizations, organizationAdmins, organizatio
       <div className="organization-forms">
         <form className="surface-card" onSubmit={(event) => { event.preventDefault(); onCreateAdmin(event.currentTarget); }}>
           <div className="card-heading"><div><span className="kicker">기관 관리자</span><h2>{selectedOrganization ? `${selectedOrganization.short_name} 관리자 만들기` : "기관을 먼저 선택하세요"}</h2></div><Users /></div>
-          <div className="form-grid"><label>이름<input name="name" minLength={2} maxLength={30} required disabled={!selectedOrganization} /></label><label>관리자 사번<input name="employee_number" pattern="[A-Za-z0-9-]{2,24}" required disabled={!selectedOrganization} /></label><label>임시 비밀번호<input name="password" type="password" minLength={4} required disabled={!selectedOrganization} /></label><label>비밀번호 확인<input name="confirm_password" type="password" minLength={4} required disabled={!selectedOrganization} /></label></div>
+          <div className="form-grid"><label>이름<input name="name" minLength={2} maxLength={30} required disabled={!selectedOrganization} /></label><label>관리자 사번<input name="employee_number" pattern="[A-Za-z0-9-]{2,24}" required disabled={!selectedOrganization} /></label><label>임시 비밀번호<input name="password" type="password" minLength={8} required disabled={!selectedOrganization} /></label><label>비밀번호 확인<input name="confirm_password" type="password" minLength={8} required disabled={!selectedOrganization} /></label></div>
           <div className="setting-info"><ShieldCheck /><p>최초 관리자는 최고관리자가 만들고, 이후 관리자 교체와 중지는 승인 요청으로 처리합니다.</p></div>
           <button className="primary-button compact" disabled={busy || !selectedOrganization}>{busy ? <LoaderCircle className="spin" /> : <Users />} 관리자 계정 만들기</button>
         </form>
@@ -2632,7 +2644,7 @@ function OrganizationManagement({ organizations, organizationAdmins, organizatio
         {selectedOrganization && editingAdmin && <form key={editingAdmin.id} className="surface-card" onSubmit={(event) => { event.preventDefault(); void onUpdateAdmin(event.currentTarget, editingAdmin).then((updated) => { if (updated) setEditingAdmin(null); }); }}>
           <div className="card-heading"><div><span className="kicker">최고관리자 직접 변경</span><h2>{editingAdmin.name} 관리자 정보 수정</h2></div><PencilLine /></div>
           <p className="card-description">기관의 변경 요청 없이 최고관리자가 로그인 아이디, 사번, 이름과 비밀번호를 직접 바꿀 수 있습니다.</p>
-          <div className="form-grid"><label className="full">계정 고유번호<input value={editingAdmin.id} disabled /></label><label>이름<input name="name" defaultValue={editingAdmin.name} minLength={2} maxLength={30} required /></label><label>관리자 사번<input name="employee_number" defaultValue={editingAdmin.employee_number} pattern="[A-Za-z0-9-]{2,24}" required /></label><label className="full">부서 또는 담당<input name="department" defaultValue={editingAdmin.department || "기관관리"} maxLength={50} /></label><label>새 비밀번호, 선택<input name="password" type="password" minLength={4} autoComplete="new-password" /></label><label>새 비밀번호 확인<input name="confirm_password" type="password" minLength={4} autoComplete="new-password" /></label></div>
+          <div className="form-grid"><label className="full">계정 고유번호<input value={editingAdmin.id} disabled /></label><label>이름<input name="name" defaultValue={editingAdmin.name} minLength={2} maxLength={30} required /></label><label>관리자 사번<input name="employee_number" defaultValue={editingAdmin.employee_number} pattern="[A-Za-z0-9-]{2,24}" required /></label><label className="full">부서 또는 담당<input name="department" defaultValue={editingAdmin.department || "기관관리"} maxLength={50} /></label><label>새 비밀번호, 선택<input name="password" type="password" minLength={8} autoComplete="new-password" /></label><label>새 비밀번호 확인<input name="confirm_password" type="password" minLength={8} autoComplete="new-password" /></label></div>
           <div className="organization-edit-actions"><button type="button" className="secondary-button" onClick={() => setEditingAdmin(null)} disabled={busy}>취소</button><button className="primary-button compact" disabled={busy}>{busy ? <LoaderCircle className="spin" /> : <Check />} 관리자 정보 저장</button></div>
         </form>}
         {selectedOrganization && <article className="surface-card">
@@ -3306,11 +3318,11 @@ function WorkPolicySettings({ policy, setPolicy, templates, assignments, profile
   </>;
 }
 function EmployeeCreateModal({ busy, onClose, onSubmit }: { busy: boolean; onClose: () => void; onSubmit: (form: HTMLFormElement) => void }) {
-  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="employee-create-title"><form className="modal correction-modal" onSubmit={(event) => { event.preventDefault(); onSubmit(event.currentTarget); }}><button type="button" className="modal-close" onClick={onClose}><X /></button><div className="modal-icon"><Users /></div><span className="kicker">기관 관리자 계정 관리</span><h2 id="employee-create-title">새 직원 추가</h2><p>새 직원은 현재 관리자의 기관으로 등록되며 사번은 입사연도 뒤 2자리와 전체 기관 공통 순번 4자리로 자동 발급됩니다.</p><div className="form-grid"><label className="full">이름<input name="name" minLength={2} maxLength={30} required /></label><label className="full">부서<input name="department" maxLength={50} placeholder="예: 상담지원팀" /></label><label className="full">관리자 현재 비밀번호<input name="admin_password" type="password" autoComplete="current-password" required /></label><label>직원 임시 비밀번호<input name="password" type="password" minLength={4} required /></label><label>임시 비밀번호 확인<input name="confirm_password" type="password" minLength={4} required /></label></div><div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>취소</button><button className="primary-button compact" disabled={busy}>{busy ? <LoaderCircle className="spin" /> : <Users />} 직원 계정 만들기</button></div></form></div>;
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="employee-create-title"><form className="modal correction-modal" onSubmit={(event) => { event.preventDefault(); onSubmit(event.currentTarget); }}><button type="button" className="modal-close" onClick={onClose}><X /></button><div className="modal-icon"><Users /></div><span className="kicker">기관 관리자 계정 관리</span><h2 id="employee-create-title">새 직원 추가</h2><p>새 직원은 현재 관리자의 기관으로 등록되며 사번은 입사연도 뒤 2자리와 전체 기관 공통 순번 4자리로 자동 발급됩니다.</p><div className="form-grid"><label className="full">이름<input name="name" minLength={2} maxLength={30} required /></label><label className="full">부서<input name="department" maxLength={50} placeholder="예: 상담지원팀" /></label><label className="full">관리자 현재 비밀번호<input name="admin_password" type="password" autoComplete="current-password" required /></label><label>직원 임시 비밀번호<input name="password" type="password" minLength={6} required /></label><label>임시 비밀번호 확인<input name="confirm_password" type="password" minLength={6} required /></label></div><div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>취소</button><button className="primary-button compact" disabled={busy}>{busy ? <LoaderCircle className="spin" /> : <Users />} 직원 계정 만들기</button></div></form></div>;
 }
 
 function EmployeeEditModal({ profile, busy, onClose, onSubmit }: { profile: Profile; busy: boolean; onClose: () => void; onSubmit: (form: HTMLFormElement) => void }) {
-  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="employee-edit-title"><form className="modal correction-modal" onSubmit={(event) => { event.preventDefault(); onSubmit(event.currentTarget); }}><button type="button" className="modal-close" onClick={onClose}><X /></button><div className="modal-icon"><PencilLine /></div><span className="kicker">직원 계정 관리</span><h2 id="employee-edit-title">{profile.name}님 정보 수정</h2><p>이름, 부서, 사번을 바꾸고 필요하면 로그인용 임시 비밀번호도 같이 설정할 수 있습니다. 기존 근태기록은 그대로 유지됩니다.</p><div className="form-grid"><label>이름<input name="name" defaultValue={profile.name} minLength={2} maxLength={30} required /></label><label>사번<input name="employee_number" defaultValue={profile.employee_number} pattern="[A-Za-z0-9-]{2,30}" required /></label><label className="full">부서<input name="department" defaultValue={profile.department || ""} maxLength={50} /></label><label>새 임시 비밀번호, 선택<input name="password" type="password" minLength={4} autoComplete="new-password" /></label><label>임시 비밀번호 확인<input name="confirm_password" type="password" minLength={4} autoComplete="new-password" /></label></div><div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>취소</button><button className="primary-button compact" disabled={busy}>{busy ? <LoaderCircle className="spin" /> : <Check />} 직원 정보 저장</button></div></form></div>;
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="employee-edit-title"><form className="modal correction-modal" onSubmit={(event) => { event.preventDefault(); onSubmit(event.currentTarget); }}><button type="button" className="modal-close" onClick={onClose}><X /></button><div className="modal-icon"><PencilLine /></div><span className="kicker">직원 계정 관리</span><h2 id="employee-edit-title">{profile.name}님 정보 수정</h2><p>이름, 부서, 사번을 바꾸고 필요하면 로그인용 임시 비밀번호도 같이 설정할 수 있습니다. 기존 근태기록은 그대로 유지됩니다.</p><div className="form-grid"><label>이름<input name="name" defaultValue={profile.name} minLength={2} maxLength={30} required /></label><label>사번<input name="employee_number" defaultValue={profile.employee_number} pattern="[A-Za-z0-9-]{2,30}" required /></label><label className="full">부서<input name="department" defaultValue={profile.department || ""} maxLength={50} /></label><label>새 임시 비밀번호, 선택<input name="password" type="password" minLength={6} autoComplete="new-password" /></label><label>임시 비밀번호 확인<input name="confirm_password" type="password" minLength={6} autoComplete="new-password" /></label></div><div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>취소</button><button className="primary-button compact" disabled={busy}>{busy ? <LoaderCircle className="spin" /> : <Check />} 직원 정보 저장</button></div></form></div>;
 }
 
 function IosInstallGuide({ onClose }: { onClose: () => void }) {
@@ -3318,11 +3330,11 @@ function IosInstallGuide({ onClose }: { onClose: () => void }) {
 }
 
 function PasswordChangeModal({ recovery, busy, onClose, onSubmit }: { recovery: boolean; busy: boolean; onClose: () => void; onSubmit: (form: HTMLFormElement) => void }) {
-  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="password-change-title"><form className="modal correction-modal" onSubmit={(event) => { event.preventDefault(); onSubmit(event.currentTarget); }}><button type="button" className="modal-close" onClick={onClose} aria-label="닫기" disabled={recovery}><X /></button><div className="modal-icon"><KeyRound /></div><span className="kicker">내 계정</span><h2 id="password-change-title">{recovery ? "새 비밀번호 설정" : "비밀번호 변경"}</h2><p>{recovery ? "재설정 안내를 받은 계정의 새 비밀번호를 입력해 주세요." : "현재 비밀번호를 확인한 뒤 새 비밀번호로 변경합니다."}</p><div className="form-grid">{!recovery && <label className="full">현재 비밀번호<input name="current_password" type="password" autoComplete="current-password" required /></label>}<label className="full">새 비밀번호<input name="new_password" type="password" autoComplete="new-password" minLength={4} required /><small>숫자 4자리부터 사용할 수 있습니다. 더 긴 비밀번호 사용을 권장합니다.</small></label><label className="full">새 비밀번호 확인<input name="confirm_password" type="password" autoComplete="new-password" minLength={4} required /></label></div><div className="modal-actions">{!recovery && <button type="button" className="secondary-button" onClick={onClose}>취소</button>}<button className="primary-button compact" disabled={busy}>{busy ? <LoaderCircle className="spin" /> : <Check />} 비밀번호 저장</button></div></form></div>;
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="password-change-title"><form className="modal correction-modal" onSubmit={(event) => { event.preventDefault(); onSubmit(event.currentTarget); }}><button type="button" className="modal-close" onClick={onClose} aria-label="닫기" disabled={recovery}><X /></button><div className="modal-icon"><KeyRound /></div><span className="kicker">내 계정</span><h2 id="password-change-title">{recovery ? "새 비밀번호 설정" : "비밀번호 변경"}</h2><p>{recovery ? "재설정 안내를 받은 계정의 새 비밀번호를 입력해 주세요." : "현재 비밀번호를 확인한 뒤 새 비밀번호로 변경합니다."}</p><div className="form-grid">{!recovery && <label className="full">현재 비밀번호<input name="current_password" type="password" autoComplete="current-password" required /></label>}<label className="full">새 비밀번호<input name="new_password" type="password" autoComplete="new-password" minLength={6} required /><small>직원은 6자 이상, 관리자는 8자 이상 영문, 숫자, 특수문자 조합을 사용합니다.</small></label><label className="full">새 비밀번호 확인<input name="confirm_password" type="password" autoComplete="new-password" minLength={6} required /></label></div><div className="modal-actions">{!recovery && <button type="button" className="secondary-button" onClick={onClose}>취소</button>}<button className="primary-button compact" disabled={busy}>{busy ? <LoaderCircle className="spin" /> : <Check />} 비밀번호 저장</button></div></form></div>;
 }
 
 function AdminResetPasswordModal({ profile, busy, onClose, onSubmit }: { profile: Profile; busy: boolean; onClose: () => void; onSubmit: (form: HTMLFormElement) => void }) {
-  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="admin-reset-password-title"><form className="modal correction-modal" onSubmit={(event) => { event.preventDefault(); onSubmit(event.currentTarget); }}><button type="button" className="modal-close" onClick={onClose} aria-label="닫기"><X /></button><div className="modal-icon"><KeyRound /></div><span className="kicker">기관 관리자 계정 관리</span><h2 id="admin-reset-password-title">{profile.name}님 비밀번호 초기화</h2><p>계정과 기존 근태기록은 유지하고 임시 비밀번호만 새로 설정합니다.</p><div className="form-grid"><label className="full">관리자 현재 비밀번호<input name="admin_password" type="password" autoComplete="current-password" required /><small>권한 확인을 위해 기관 관리자 비밀번호를 다시 입력합니다.</small></label><label className="full">직원 임시 비밀번호<input name="new_password" type="password" autoComplete="new-password" minLength={4} required /><small>숫자 4자리부터 설정할 수 있습니다.</small></label><label className="full">임시 비밀번호 확인<input name="confirm_password" type="password" autoComplete="new-password" minLength={4} required /></label></div><div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>취소</button><button className="primary-button compact" disabled={busy}>{busy ? <LoaderCircle className="spin" /> : <KeyRound />} 임시 비밀번호 설정</button></div></form></div>;
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="admin-reset-password-title"><form className="modal correction-modal" onSubmit={(event) => { event.preventDefault(); onSubmit(event.currentTarget); }}><button type="button" className="modal-close" onClick={onClose} aria-label="닫기"><X /></button><div className="modal-icon"><KeyRound /></div><span className="kicker">기관 관리자 계정 관리</span><h2 id="admin-reset-password-title">{profile.name}님 비밀번호 초기화</h2><p>계정과 기존 근태기록은 유지하고 임시 비밀번호만 새로 설정합니다.</p><div className="form-grid"><label className="full">관리자 현재 비밀번호<input name="admin_password" type="password" autoComplete="current-password" required /><small>권한 확인을 위해 기관 관리자 비밀번호를 다시 입력합니다.</small></label><label className="full">직원 임시 비밀번호<input name="new_password" type="password" autoComplete="new-password" minLength={6} required /><small>6자 이상으로 설정해 주세요.</small></label><label className="full">임시 비밀번호 확인<input name="confirm_password" type="password" autoComplete="new-password" minLength={6} required /></label></div><div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>취소</button><button className="primary-button compact" disabled={busy}>{busy ? <LoaderCircle className="spin" /> : <KeyRound />} 임시 비밀번호 설정</button></div></form></div>;
 }
 
 function ConsentModal({ onCancel, onAgree }: { onCancel: () => void; onAgree: () => void }) {

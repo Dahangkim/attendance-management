@@ -1,7 +1,7 @@
 import { runtimeEnv } from "../_lib/runtime-env";
 import { authenticatedAdmin } from "../_lib/admin-auth";
 import { createServerSupabaseClient } from "../_lib/server-supabase";
-import { toSupabasePassword } from "../../../lib/auth-password";
+import { isPrivilegedPassword, toSupabasePassword } from "../../../lib/auth-password";
 
 export const dynamic = "force-dynamic";
 const json = (body: Record<string, unknown>, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   const name = typeof body?.name === "string" ? body.name.trim() : "";
   const employeeNumber = typeof body?.employeeNumber === "string" ? body.employeeNumber.trim().toUpperCase() : "";
   const password = typeof body?.password === "string" ? body.password : "";
-  if (!orgId || requestedEmail && !/^\S+@\S+\.\S+$/.test(requestedEmail) || name.length < 2 || !/^[A-Z0-9-]{2,24}$/.test(employeeNumber) || password.length < 4) {
+  if (!orgId || requestedEmail && !/^\S+@\S+\.\S+$/.test(requestedEmail) || name.length < 2 || !/^[A-Z0-9-]{2,24}$/.test(employeeNumber) || !isPrivilegedPassword(password)) {
     return json({ ok: false, code: "INVALID_INPUT" }, 400);
   }
   const { data: organization } = await client.from("organizations").select("id,org_code").eq("id", orgId).eq("is_active", true).maybeSingle();

@@ -22,7 +22,7 @@ export async function PATCH(request: Request) {
   const employeeNumber = typeof body?.employeeNumber === "string" ? body.employeeNumber.trim().toUpperCase() : "";
   const department = typeof body?.department === "string" ? body.department.trim() : "";
   const password = typeof body?.password === "string" ? body.password : "";
-  if (!validUserId(userId) || name.length < 2 || name.length > 30 || !/^[A-Z0-9-]{2,30}$/.test(employeeNumber) || department.length > 50 || (password && password.length < 4)) {
+  if (!validUserId(userId) || name.length < 2 || name.length > 30 || !/^[A-Z0-9-]{2,30}$/.test(employeeNumber) || department.length > 50 || (password && password.length < 6)) {
     return json({ ok: false, code: "INVALID_INPUT" }, 400);
   }
 
