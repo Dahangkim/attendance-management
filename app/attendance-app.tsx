@@ -1208,25 +1208,22 @@ export default function AttendanceApp() {
     setMenuOpen(false);
     setBusy(true); setLoginError("");
     const identifier = loginIdentifier.trim();
-    if (!identifier.includes("@")) {
-      const response = await fetch("/api/employee-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employeeNumber: identifier, password: loginPassword }),
-      }).catch(() => null);
-      const result = response ? await response.json().catch(() => ({})) as { session?: { access_token: string; refresh_token: string }; organization?: TenantOrganization; code?: string } : {};
-      if (!response?.ok || !result.session) {
-        setLoginError("사번 또는 비밀번호를 확인해 주세요.");
-        setBusy(false);
-        return;
-      }
-      if (result.organization) setTenantOrganization(result.organization);
-      const { error } = await supabase.auth.setSession(result.session);
-      if (error) setLoginError("로그인 정보를 연결하지 못했습니다. 다시 시도해 주세요.");
-    } else {
-      const { error } = await signInWithCompatiblePassword(supabase, identifier, loginPassword);
-      if (error) setLoginError("이메일 또는 비밀번호를 확인해 주세요.");
+    const response = await fetch("/api/employee-login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier, password: loginPassword }),
+    }).catch(() => null);
+    const result = response ? await response.json().catch(() => ({})) as { session?: { access_token: string; refresh_token: string }; organization?: TenantOrganization; code?: string } : {};
+    if (!response?.ok || !result.session) {
+      setLoginError(result.code === "PASSWORD_MIGRATION_FAILED"
+        ? "기존 비밀번호 전환을 완료하지 못했습니다. 관리자에게 문의해 주세요."
+        : "사번, 이메일 또는 비밀번호를 확인해 주세요.");
+      setBusy(false);
+      return;
     }
+    if (result.organization) setTenantOrganization(result.organization);
+    const { error } = await supabase.auth.setSession(result.session);
+    if (error) setLoginError("로그인 정보를 연결하지 못했습니다. 다시 시도해 주세요.");
     setBusy(false);
   }
 

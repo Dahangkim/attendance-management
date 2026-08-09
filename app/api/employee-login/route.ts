@@ -15,18 +15,27 @@ export async function POST(request: Request) {
   if (!supabaseUrl || !publishableKey || !secretKey) return json({ ok: false, code: "LOGIN_NOT_CONFIGURED" }, 503);
 
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
-  const employeeNumber = typeof body?.employeeNumber === "string" ? body.employeeNumber.trim().toUpperCase() : "";
+  const identifier = typeof body?.identifier === "string"
+    ? body.identifier.trim()
+    : typeof body?.employeeNumber === "string"
+      ? body.employeeNumber.trim()
+      : "";
   const password = typeof body?.password === "string" ? body.password : "";
-  if (!/^[A-Z0-9-]{2,30}$/.test(employeeNumber) || password.length < 1 || password.length > 200) {
+  const isEmail = identifier.includes("@");
+  const employeeNumber = identifier.toUpperCase();
+  if ((!isEmail && !/^[A-Z0-9-]{2,30}$/.test(employeeNumber)) || password.length < 1 || password.length > 200) {
     return json({ ok: false, code: "INVALID_CREDENTIALS" }, 401);
   }
 
   const adminClient = createServerSupabaseClient(supabaseUrl, secretKey);
-  const { data: profiles, error: profileError } = await adminClient.from("profiles")
+  let profileQuery = adminClient.from("profiles")
     .select("id,email,is_active,org_id,role,must_change_password")
-    .ilike("employee_number", employeeNumber)
     .in("role", ["employee", "team_lead", "org_admin", "admin", "super_admin"])
     .limit(2);
+  profileQuery = isEmail
+    ? profileQuery.ilike("email", identifier)
+    : profileQuery.ilike("employee_number", employeeNumber);
+  const { data: profiles, error: profileError } = await profileQuery;
   if (profileError || profiles?.length !== 1 || !profiles[0].is_active) {
     return json({ ok: false, code: "INVALID_CREDENTIALS" }, 401);
   }
@@ -47,11 +56,18 @@ export async function POST(request: Request) {
   const authEmail = authUserData.user?.email;
   if (authUserError || !authEmail) return json({ ok: false, code: "INVALID_CREDENTIALS" }, 401);
   const authClient = createServerSupabaseClient(supabaseUrl, publishableKey);
+  let usedLegacyPassword = false;
   let { data: authData, error: authError } = await authClient.auth.signInWithPassword({ email: authEmail, password: toSupabasePassword(password) });
-  if (authError && profile.must_change_password && password.length >= 4 && password.length < 6) {
+  if (authError && password.length >= 4 && password.length < 6) {
     ({ data: authData, error: authError } = await authClient.auth.signInWithPassword({ email: authEmail, password: `attendance:${password}` }));
+    usedLegacyPassword = !authError && Boolean(authData.session);
   }
   if (authError || !authData.session || authData.user.id !== profile.id) return json({ ok: false, code: "INVALID_CREDENTIALS" }, 401);
+
+  if (usedLegacyPassword && !profile.must_change_password) {
+    const { error: migrationError } = await adminClient.from("profiles").update({ must_change_password: true }).eq("id", profile.id);
+    if (migrationError) return json({ ok: false, code: "PASSWORD_MIGRATION_FAILED" }, 500);
+  }
 
   return json({
     ok: true,

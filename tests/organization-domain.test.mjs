@@ -70,6 +70,17 @@ test("employee login resolves the organization from a globally unique employee n
   assert.match(app, /기관별 접속 도메인, 선택/);
 });
 
+test("unified login supports email and safely migrates legacy short passwords", async () => {
+  const route = await readFile(new URL("app/api/employee-login/route.ts", root), "utf8");
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  assert.match(route, /body\?\.identifier/);
+  assert.match(route, /profileQuery\.ilike\("email", identifier\)/);
+  assert.match(route, /password: `attendance:\$\{password\}`/);
+  assert.match(route, /update\(\{ must_change_password: true \}\)/);
+  assert.doesNotMatch(route, /authError && profile\.must_change_password/);
+  assert.match(app, /body: JSON\.stringify\(\{ identifier, password: loginPassword \}\)/);
+});
+
 test("employee creation assigns organization on the server", async () => {
   const route = await readFile(new URL("app/api/admin-create-employee/route.ts", root), "utf8");
   const repair = await readFile(new URL("supabase/repair_profile_employee_number_global_unique.sql", root), "utf8");
@@ -505,13 +516,15 @@ test("organization administrators review overtime only inside their organization
   assert.match(sql, /correction_request_id,org_id/);
 });
 
-test("employee number login no longer aliases short passwords and keeps case-insensitive numbers", async () => {
+test("employee login keeps raw passwords and securely migrates legacy short passwords", async () => {
   const route = await readFile(new URL("app/api/employee-login/route.ts", root), "utf8");
   const password = await readFile(new URL("lib/auth-password.ts", root), "utf8");
   assert.match(route, /password\.length < 1/);
   assert.match(route, /\.ilike\("employee_number", employeeNumber\)/);
   assert.match(route, /toSupabasePassword\(password\)/);
-  assert.match(route, /profile\.must_change_password && password\.length >= 4 && password\.length < 6/);
+  assert.match(route, /authError && password\.length >= 4 && password\.length < 6/);
+  assert.match(route, /usedLegacyPassword && !profile\.must_change_password/);
+  assert.match(route, /update\(\{ must_change_password: true \}\)/);
   assert.match(password, /return password;/);
   assert.doesNotMatch(password, /attendance:/);
   assert.doesNotMatch(route, /!profiles\[0\]\.email/);
