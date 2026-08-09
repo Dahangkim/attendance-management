@@ -13,11 +13,11 @@ export async function GET(request: Request) {
   const client = createServerSupabaseClient(url, key);
   const { actor, code } = await authenticatedAdmin(request, client);
   if (!actor) return json({ ok: false, code }, code === "AUTH_REQUIRED" ? 401 : 403);
-  if (actor.role !== "super_admin") return json({ ok: false, code: "SUPER_ADMIN_REQUIRED" }, 403);
   const requestUrl = new URL(request.url);
   const orgId = requestUrl.searchParams.get("orgId") || "";
   const month = requestUrl.searchParams.get("month") || "";
   if (!UUID_PATTERN.test(orgId) || !/^20\d{2}-(0[1-9]|1[0-2])$/.test(month)) return json({ ok: false, code: "INVALID_INPUT" }, 400);
+  if (actor.role !== "super_admin" && actor.org_id !== orgId) return json({ ok: false, code: "ORGANIZATION_ACCESS_DENIED" }, 403);
   const from = `${month}-01`;
   const untilDate = new Date(`${from}T00:00:00+09:00`);
   untilDate.setMonth(untilDate.getMonth() + 1);
@@ -28,14 +28,16 @@ export async function GET(request: Request) {
   ]);
   if (!organization) return json({ ok: false, code: "ORGANIZATION_NOT_FOUND" }, 404);
   if (profileError) return json({ ok: false, code: "ORGANIZATION_DATA_FAILED" }, 500);
-  const [records, requests, exceptions, audits, independentAudits, closing] = await Promise.all([
+  const [records, requests, exceptions, audits, closing] = await Promise.all([
     client.from("attendance_records").select("*").eq("org_id", orgId).gte("work_date", from).lt("work_date", until).is("deleted_at", null).order("work_date", { ascending: false }),
     client.from("correction_requests").select("*").eq("org_id", orgId).gte("target_date", from).lt("target_date", until).order("requested_at", { ascending: false }),
     client.from("attendance_exceptions").select("*").eq("org_id", orgId).lt("start_date", until).gte("end_date", from).is("cancelled_at", null).order("start_date", { ascending: false }),
     client.from("attendance_audit_logs").select("*").eq("org_id", orgId).gte("created_at", new Date(`${from}T00:00:00+09:00`).toISOString()).lt("created_at", new Date(`${until}T00:00:00+09:00`).toISOString()).order("created_at", { ascending: false }),
-    client.from("attendance_audit_logs").select("*").eq("changed_by_role", "super_admin").not("action_type", "in", '(organization_change_approved,organization_change_rejected)').gte("created_at", new Date(`${from}T00:00:00+09:00`).toISOString()).lt("created_at", new Date(`${until}T00:00:00+09:00`).toISOString()).order("created_at", { ascending: false }),
     client.from("monthly_closings").select("*").eq("org_id", orgId).eq("year", Number(month.slice(0, 4))).eq("month", Number(month.slice(5, 7))).maybeSingle(),
   ]);
+  const independentAudits = actor.role === "super_admin"
+    ? await client.from("attendance_audit_logs").select("*").eq("changed_by_role", "super_admin").not("action_type", "in", '(organization_change_approved,organization_change_rejected)').gte("created_at", new Date(`${from}T00:00:00+09:00`).toISOString()).lt("created_at", new Date(`${until}T00:00:00+09:00`).toISOString()).order("created_at", { ascending: false })
+    : { data: [], error: null };
   if ([records, requests, exceptions, audits, independentAudits, closing].some((result) => result.error)) return json({ ok: false, code: "ORGANIZATION_DATA_FAILED" }, 500);
   const profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]));
   const combinedAudits = [...(audits.data || []), ...(independentAudits.data || []).filter((item) => !(audits.data || []).some((existing) => existing.id === item.id))];

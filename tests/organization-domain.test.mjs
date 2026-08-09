@@ -243,6 +243,15 @@ test("super administrators create and select organizations from the application"
   assert.doesNotMatch(route, /attendance_records_view/);
 });
 
+test("organization administrators load audit history through an organization-checked server route", async () => {
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  const route = await readFile(new URL("app/api/admin-organization-attendance/route.ts", root), "utf8");
+  assert.match(app, /effectiveRole === "super_admin" \? selectedOrgId : currentProfile\?\.org_id \|\| ""/);
+  assert.match(route, /actor\.role !== "super_admin" && actor\.org_id !== orgId/);
+  assert.match(route, /ORGANIZATION_ACCESS_DENIED/);
+  assert.match(route, /actor\.role === "super_admin"\s*\? await client\.from\("attendance_audit_logs"\)/);
+});
+
 test("super administrator branding and organization administrator accounts are managed independently", async () => {
   const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
   const route = await readFile(new URL("app/api/admin-org-admin-account/route.ts", root), "utf8");
