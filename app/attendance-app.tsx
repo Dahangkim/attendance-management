@@ -1670,10 +1670,22 @@ export default function AttendanceApp() {
     setBusy(true);
     const results = await Promise.all(employeeIds.map((employeeId) => client.rpc("admin_create_emergency_support_work", { ...sharedPayload, p_employee_id: employeeId })));
     setBusy(false);
-    const failedIds = employeeIds.filter((_, index) => Boolean(results[index].error));
-    if (failedIds.length) {
-      const failedNames = failedIds.map((id) => profiles.find((person) => person.id === id)?.name || "미확인 직원");
-      setNotice({ tone: "error", text: `긴급지원 근무를 등록하지 못한 직원: ${failedNames.join(", ")}. ${failedNames.length ? "기존 긴급지원과 시간이 겹치거나 월 마감된 기록인지 확인해 주세요." : "입력값과 월 마감 여부를 확인해 주세요."}` });
+    const failedResults = employeeIds.map((id, index) => ({ id, error: results[index].error })).filter((item) => Boolean(item.error));
+    if (failedResults.length) {
+      const failureDetails = failedResults.map(({ id, error }) => {
+        const name = profiles.find((person) => person.id === id)?.name || "미확인 직원";
+        const message = String(error?.message || "");
+        const detail = message.includes("EMERGENCY_SUPPORT_TIME_OVERLAP") ? "기존 긴급지원 시간과 겹칩"
+          : message.includes("MONTH_CLOSED") ? "해당 월이 마감됨"
+            : message.includes("EMERGENCY_SUPPORT_DISABLED") ? "기관의 긴급지원 기능이 꺼져 있음"
+              : message.includes("EMPLOYEE_NOT_FOUND") ? "활성 직원 계정을 확인할 수 없음"
+                : message.includes("ORGANIZATION_ACCESS_DENIED") ? "다른 기관 직원이거나 기관 권한이 맞지 않음"
+                  : message.includes("INVALID_EMERGENCY_SUPPORT_RANGE") ? "종료일시가 시작일시보다 빠르거나 24시간을 초과함"
+                    : error?.code === "23514" ? "데이터베이스의 긴급지원 유형 허용 규칙이 오래됨"
+                      : `확인하지 못한 데이터베이스 오류${error?.code ? ` ${error.code}` : ""}`;
+        return `${name}: ${detail}`;
+      });
+      setNotice({ tone: "error", text: `긴급지원 근무를 등록하지 못했습니다. ${failureDetails.join(" / ")}` });
       await loadRemoteData(currentProfile);
       return;
     }

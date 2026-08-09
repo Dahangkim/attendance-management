@@ -552,6 +552,23 @@ test("fresh installs enforce emergency support and protected workplace approval"
   assert.match(repair, /revoke insert, update, delete on public\.organization_settings from authenticated/);
 });
 
+test("emergency support stays separate from attendance and time clearing is organization scoped", async () => {
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  const repair = await readFile(new URL("supabase/repair_emergency_support_registration_and_time_clear.sql", root), "utf8");
+  const install = await readFile(new URL("supabase/install_current.sql", root), "utf8");
+  assert.match(repair, /'emergency_support','other_leave','work_type'/);
+  assert.match(repair, /request\.request_type = 'emergency_support'/);
+  assert.match(repair, /일반 출퇴근과 긴급지원은 별개/);
+  assert.match(repair, /v_role not in \('admin','org_admin','super_admin'\)/);
+  assert.match(repair, /v_record\.org_id is distinct from v_org_id/);
+  assert.match(repair, /attendance_cleanup_events_after_time_clear/);
+  assert.match(repair, /action_type in \('clock_in','clock_out'\)/);
+  assert.match(install, /긴급지원 등록과 출퇴근시각 삭제 최종 보완/);
+  assert.match(app, /데이터베이스의 긴급지원 유형 허용 규칙이 오래됨/);
+  assert.match(app, /EMPLOYEE_NOT_FOUND/);
+  assert.match(app, /EMERGENCY_SUPPORT_DISABLED/);
+});
+
 test("only public developer support is exposed and institution support stays offline", async () => {
   const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
   const owner = await readFile(new URL("lib/application-owner.ts", root), "utf8");
