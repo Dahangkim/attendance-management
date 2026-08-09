@@ -295,9 +295,11 @@ tbody tr:hover { background: #fafaf7; }
 .timeline-content time { margin-left: auto; color: var(--muted); font-size: 11px; }
 .timeline-content p { margin: 10px 0 6px; }
 .timeline-content small { color: var(--muted); }
-.audit-restore-button { margin-top: 12px; display: flex; align-items: center; gap: 6px; width: fit-content; border: 1px solid #b9d6cc; border-radius: 9px; padding: 8px 11px; background: #eff8f5; color: var(--brand); font-weight: 700; }
-.audit-values { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
+.audit-restore-button { margin-top: 12px; display: flex; align-items: center; gap: 6px; width: fit-content; border: 1px solid color-mix(in srgb, var(--green) 30%, white); border-radius: 9px; padding: 8px 11px; background: var(--green-soft); color: var(--green-deep); font-weight: 700; }
+.audit-values { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 7px; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
+.audit-values span { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
 .audit-values svg { width: 14px; }
+.timeline-content { min-width: 0; }
 
 .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .full-span-card { grid-column: 1 / -1; }
@@ -449,6 +451,13 @@ tbody tr:hover { background: #fafaf7; }
 .request-category-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: -4px 0 18px; }
 .request-category-tabs button { padding: 9px 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); font-weight: 700; }
 .request-category-tabs button.active { border-color: var(--green); background: var(--green-soft); color: var(--green-deep); }
+.audit-category-tabs button.active { border-color: color-mix(in srgb, var(--green) 72%, var(--green-contrast)); background: var(--green); color: var(--green-contrast); }
+.policy-basic-grid { margin-bottom: 18px; }
+.policy-toggle-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 4px 0 16px; }
+.policy-toggle-card { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: color-mix(in srgb, var(--green) 3%, var(--white)); }
+.policy-toggle-card .checkbox-setting { margin: 0; }
+.policy-toggle-card p { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.settings-save-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
 .login-privacy { margin-top: 30px; padding-top: 22px; display: flex; gap: 11px; border-top: 1px solid var(--line); }
 .login-privacy svg { color: var(--green-2); }
 .login-privacy p { margin: 0; }
@@ -480,6 +489,7 @@ tbody tr:hover { background: #fafaf7; }
   .metric-grid { grid-template-columns: repeat(2, 1fr); }
   .settings-grid { grid-template-columns: 1fr; }
   .protected-change-grid { grid-template-columns: 1fr; }
+  .policy-toggle-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
