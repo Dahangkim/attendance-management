@@ -464,8 +464,9 @@ test("audit history uses readable Korean labels", async () => {
 
 test("audit history classifies by organization scope and keeps long values inside cards", async () => {
   const [app, css] = await Promise.all([read("app/attendance-app.tsx"), read("app/globals.css")]);
-  assert.ok(app.includes('log.org_id && log.changed_by_role === "super_admin"'));
-  assert.ok(app.includes('if (log.org_id) return category === "institution"'));
+  assert.ok(app.includes('const auditCategory = (log: AuditLog)'));
+  assert.ok(app.includes('superAdminOrganizationActions.has(log.action_type)'));
+  assert.ok(app.includes('return "institution"'));
   assert.ok(app.includes('governanceActions.has(log.action_type)'));
   assert.ok(app.includes('"이전 기관 화면 설정"'));
   assert.ok(app.includes('"변경된 기관 화면 설정"'));
@@ -476,6 +477,16 @@ test("audit history classifies by organization scope and keeps long values insid
   assert.ok(app.includes('className="request-category-tabs audit-category-tabs"'));
   assert.ok(css.includes(".audit-category-tabs button.active"));
   assert.ok(css.includes("color: var(--green-contrast)"));
+});
+
+test("audit exports include every category instead of only the selected tab", async () => {
+  const app = await read("app/attendance-app.tsx");
+  assert.ok(app.includes('const exportLogs = sourceLogs.filter'));
+  assert.ok(app.includes('["분류", "처리일시"'));
+  assert.ok(app.includes('category: auditCategoryLabel(auditCategory(log))'));
+  assert.ok(app.includes('sheet.autoFilter = { from: "A1", to: "J1" }'));
+  assert.ok(app.includes('governanceActions.has(log.action_type)'));
+  assert.ok(!app.includes('const values = filtered.map((log)'));
 });
 
 test("work policy toggles keep each explanation with its control", async () => {

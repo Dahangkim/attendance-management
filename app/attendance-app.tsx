@@ -2901,20 +2901,31 @@ function AuditView({ logs, brandTitle, onRestore, superAdmin = false, selectedOr
   }, [auditMonth, logs, selectedOrgId, superAdmin]);
   const sourceLogs = supabase ? monthLogs : logs;
   const governanceActions = new Set(["organization_change_approved", "organization_change_rejected", "organization_change_reopened"]);
+  const superAdminOrganizationActions = new Set(["organization_created", "organization_updated", "organization_deactivated", "organization_protection_updated", "org_admin_created", "org_admin_account_updated", "org_admin_account_deleted"]);
+  const auditCategory = (log: AuditLog): "institution" | "governance" | "independent" => {
+    if (!log.org_id) return "independent";
+    if (log.changed_by_role === "super_admin" || governanceActions.has(log.action_type) || superAdminOrganizationActions.has(log.action_type)) return "governance";
+    return "institution";
+  };
+  const auditCategoryLabel = (value: "institution" | "governance" | "independent") => value === "institution" ? "기관 내부 활동" : value === "governance" ? "최고관리자의 기관 처리" : "최고관리자 직접 변경";
   const categoryLogs = sourceLogs.filter((log) => {
-    if (governanceActions.has(log.action_type)) return category === "governance" && (!selectedOrgId || log.org_id === selectedOrgId);
-    if (log.org_id && log.changed_by_role === "super_admin") return category === "governance" && (!selectedOrgId || log.org_id === selectedOrgId);
-    if (log.org_id) return category === "institution" && (!selectedOrgId || log.org_id === selectedOrgId);
-    if (!superAdmin) return category === "governance";
-    return category === "independent";
+    const resolvedCategory = auditCategory(log);
+    if (resolvedCategory === "independent") return superAdmin && category === "independent";
+    return resolvedCategory === category && (!selectedOrgId || log.org_id === selectedOrgId);
   });
   const filtered = categoryLogs.filter((log) => `${log.employee_name} ${log.changed_by_name} ${log.changed_field} ${log.reason}`.includes(query));
   const reviewedChanges = organizationChanges.filter((request) => request.status !== "pending" && (!selectedOrgId || request.org_id === selectedOrgId) && (request.reviewed_at || request.requested_at).startsWith(auditMonth) && `${request.request_type} ${request.reason} ${request.review_note}`.includes(query));
   const displayLogs = filtered.filter((log) => !["organization_change_approved", "organization_change_rejected"].includes(log.action_type));
   const selectedOrganizationName = organizations.find((item) => item.id === selectedOrgId)?.short_name || "해당 기관";
+  const exportLogs = sourceLogs.filter((log) => {
+    const resolvedCategory = auditCategory(log);
+    if (resolvedCategory === "independent" && !superAdmin) return false;
+    if (resolvedCategory !== "independent" && selectedOrgId && log.org_id !== selectedOrgId) return false;
+    return `${log.employee_name} ${log.changed_by_name} ${log.changed_field} ${log.reason}`.includes(query);
+  });
   const exportAuditCsv = () => {
-    const headers = ["처리일시", "직원명", "처리유형", "변경항목", "변경 전", "변경 후", "처리자", "처리자 권한", "사유"];
-    const values = filtered.map((log) => [new Date(log.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }), log.employee_name || "", AUDIT_ACTION_LABEL[log.action_type] || log.action_type, auditFieldLabel(log.changed_field), readableAuditValue(log.before_value), readableAuditValue(log.after_value), log.changed_by_name || "시스템", log.changed_by_role || "", log.reason]);
+    const headers = ["분류", "처리일시", "직원명", "처리유형", "변경항목", "변경 전", "변경 후", "처리자", "처리자 권한", "사유"];
+    const values = exportLogs.map((log) => [auditCategoryLabel(auditCategory(log)), new Date(log.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }), log.employee_name || "", AUDIT_ACTION_LABEL[log.action_type] || log.action_type, auditFieldLabel(log.changed_field), readableAuditValue(log.before_value), readableAuditValue(log.after_value), log.changed_by_name || "시스템", log.changed_by_role || "", log.reason]);
     const csv = [headers, ...values].map((line) => line.map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`).join(",")).join("\r\n");
     downloadAuditFile(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }), `${auditMonth}_변경이력.csv`);
   };
@@ -2924,16 +2935,17 @@ function AuditView({ logs, brandTitle, onRestore, superAdmin = false, selectedOr
     workbook.creator = brandTitle;
     const sheet = workbook.addWorksheet("변경 이력", { views: [{ state: "frozen", ySplit: 1 }] });
     sheet.columns = [
+      { header: "분류", key: "category", width: 24 },
       { header: "처리일시", key: "created", width: 22 }, { header: "직원명", key: "employee", width: 12 },
       { header: "처리유형", key: "action", width: 20 }, { header: "변경항목", key: "field", width: 20 },
       { header: "변경 전", key: "before", width: 36 }, { header: "변경 후", key: "after", width: 36 },
       { header: "처리자", key: "actor", width: 12 }, { header: "처리자 권한", key: "role", width: 14 },
       { header: "사유", key: "reason", width: 34 },
     ];
-    filtered.forEach((log) => sheet.addRow({ created: new Date(log.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }), employee: log.employee_name || "", action: AUDIT_ACTION_LABEL[log.action_type] || log.action_type, field: auditFieldLabel(log.changed_field), before: readableAuditValue(log.before_value), after: readableAuditValue(log.after_value), actor: log.changed_by_name || "시스템", role: log.changed_by_role || "", reason: log.reason }));
+    exportLogs.forEach((log) => sheet.addRow({ category: auditCategoryLabel(auditCategory(log)), created: new Date(log.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }), employee: log.employee_name || "", action: AUDIT_ACTION_LABEL[log.action_type] || log.action_type, field: auditFieldLabel(log.changed_field), before: readableAuditValue(log.before_value), after: readableAuditValue(log.after_value), actor: log.changed_by_name || "시스템", role: log.changed_by_role || "", reason: log.reason }));
     sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
     sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF173F35" } };
-    sheet.autoFilter = { from: "A1", to: "I1" };
+    sheet.autoFilter = { from: "A1", to: "J1" };
     const buffer = await workbook.xlsx.writeBuffer();
     downloadAuditFile(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `${auditMonth}_변경이력.xlsx`);
   };
