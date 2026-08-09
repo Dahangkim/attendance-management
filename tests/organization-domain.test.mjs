@@ -494,4 +494,8 @@ test("security hardening isolates settings, closings, workplaces, and organizati
   assert.match(sql, /super admin manages statutory holidays/);
   assert.match(sql, /update public\.profiles set must_change_password = true where is_active/);
   assert.match(sql, /complete_required_password_change/);
+  assert.match(sql, /admin_set_report_viewer/);
+  assert.match(sql, /v_role not in \('admin','org_admin','super_admin'\)/);
+  assert.match(sql, /org_id = v_employee\.org_id/);
+  assert.match(sql, /changed_by_role, org_id/);
 });

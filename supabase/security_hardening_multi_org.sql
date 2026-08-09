@@ -127,5 +127,44 @@ end $$;
 revoke all on function public.save_workplace_settings(text,double precision,double precision,integer,integer) from public, anon;
 grant execute on function public.save_workplace_settings(text,double precision,double precision,integer,integer) to authenticated;
 
+-- 기관관리자는 자기 기관의 재직 직원에게만 조회 전용 부관리자 권한을 부여합니다.
+create or replace function public.admin_set_report_viewer(
+  p_employee_id uuid,
+  p_enabled boolean
+) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_role text := public.current_profile_role();
+  v_org_id uuid := public.current_profile_org_id();
+  v_employee public.profiles;
+begin
+  if v_role not in ('admin','org_admin','super_admin') then raise exception 'ADMIN_REQUIRED'; end if;
+  select * into v_employee
+  from public.profiles
+  where id = p_employee_id
+    and role = 'employee'
+    and is_active = true
+    and (v_role = 'super_admin' or org_id = v_org_id)
+  for update;
+  if not found then raise exception 'EMPLOYEE_NOT_FOUND'; end if;
+
+  update public.profiles
+  set can_view_reports = p_enabled, updated_at = now()
+  where id = p_employee_id and org_id = v_employee.org_id;
+
+  insert into public.attendance_audit_logs (
+    employee_id, action_type, changed_field, before_value, after_value,
+    reason, changed_by, changed_by_role, org_id
+  ) values (
+    p_employee_id, 'report_viewer_changed', 'can_view_reports',
+    v_employee.can_view_reports::text, p_enabled::text,
+    case when p_enabled then '부관리자 조회 권한 부여' else '부관리자 조회 권한 해제' end,
+    auth.uid(), v_role, v_employee.org_id
+  );
+end $$;
+
+revoke all on function public.admin_set_report_viewer(uuid,boolean) from public, anon;
+grant execute on function public.admin_set_report_viewer(uuid,boolean) to authenticated;
+
 notify pgrst, 'reload schema';
 commit;
