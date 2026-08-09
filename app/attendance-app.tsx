@@ -1869,7 +1869,9 @@ export default function AttendanceApp() {
     const result = await persistWorkplace(settingsDraft);
     if (!result.workplace) { setNotice({ tone: "error", text: `사업장 설정을 저장하지 못했습니다. 오류코드 ${result.errorCode || "확인 불가"}` }); return; }
     setOrganizationSettingsDraft(organizationResult.settings);
-    setSettingsDraft(result.workplace); setWorkplace(result.workplace); setNotice({ tone: "success", text: "사업장 위치와 근무시간 설정을 저장했습니다." });
+    setSettingsDraft(result.workplace); setWorkplace(result.workplace); setNotice(organizationResult.featureSqlRequired
+      ? { tone: "warning", text: "기존 근무 설정은 저장했지만 긴급지원 설정은 데이터베이스 SQL 적용 후 사용할 수 있습니다." }
+      : { tone: "success", text: "사업장 위치와 근무시간 설정을 저장했습니다." });
   }
 
   async function saveWorkPolicy() {
@@ -1963,7 +1965,7 @@ export default function AttendanceApp() {
     setShiftAssignments((current) => current.filter((item) => item.id !== assignment.id));
   }
 
-  async function persistOrganizationSettings(next: OrganizationSettings): Promise<{ settings: OrganizationSettings | null; errorCode: string | null }> {
+  async function persistOrganizationSettings(next: OrganizationSettings): Promise<{ settings: OrganizationSettings | null; errorCode: string | null; featureSqlRequired?: boolean }> {
     if (!supabase) return { settings: next, errorCode: null };
     const { data, error } = await supabase.rpc("save_organization_settings", {
       p_default_start_time: next.default_start_time,
@@ -1974,6 +1976,19 @@ export default function AttendanceApp() {
       p_office_ip_address: next.office_ip_address.trim(),
       p_emergency_support_enabled: next.emergency_support_enabled,
     });
+    if (error && error.code === "PGRST202") {
+      const legacyResult = await supabase.rpc("save_organization_settings", {
+        p_default_start_time: next.default_start_time,
+        p_default_end_time: next.default_end_time,
+        p_break_minutes: next.break_minutes,
+        p_late_grace_minutes: next.late_grace_minutes,
+        p_early_leave_grace_minutes: next.early_leave_grace_minutes,
+        p_office_ip_address: next.office_ip_address.trim(),
+      });
+      if (legacyResult.error) return { settings: null, errorCode: legacyResult.error.code || "RPC_ERROR" };
+      const legacySaved = (Array.isArray(legacyResult.data) ? legacyResult.data[0] : legacyResult.data) as OrganizationSettings | null;
+      return { settings: normalizeOrganizationSettings(legacySaved || { ...next, emergency_support_enabled: true }), errorCode: null, featureSqlRequired: true };
+    }
     if (error) return { settings: null, errorCode: error.code || "RPC_ERROR" };
     const saved = (Array.isArray(data) ? data[0] : data) as OrganizationSettings | null;
     return { settings: normalizeOrganizationSettings(saved || next), errorCode: null };

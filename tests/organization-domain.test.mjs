@@ -173,6 +173,8 @@ test("each organization can hide new emergency support actions without deleting 
   assert.match(app, /기존 기록만 보존합니다/);
   assert.match(app, /emergencySupportEnabled \&\& <button className="primary-button compact"/);
   assert.match(app, /emergencySupportEnabled \|\| activeEmergencyRequest/);
+  assert.match(app, /error\.code === "PGRST202"/);
+  assert.match(app, /긴급지원 설정은 데이터베이스 SQL 적용 후 사용할 수 있습니다/);
   assert.match(migration, /add column if not exists emergency_support_enabled boolean not null default true/);
   assert.match(migration, /EMERGENCY_SUPPORT_DISABLED/);
   assert.match(migration, /before insert on public\.correction_requests/);
