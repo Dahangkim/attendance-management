@@ -1712,6 +1712,27 @@ export default function AttendanceApp() {
     setNotice({ tone: createdCount === 0 ? "info" : "success", text: createdCount === 0 && batchResult.skipped_names?.length ? `이미 출퇴근 근무기록이 있어 새 기록을 만들지 않았습니다: ${batchResult.skipped_names.join(", ")}. 긴급지원 기록은 별도로 유지됩니다. 일반 근무시간은 해당 날짜의 수정 버튼에서 바꿔 주세요.` : `${createdCount}명의 근무기록을 추가했습니다.${batchResult.skipped_names?.length ? ` 기존 기록이 있어 제외된 직원: ${batchResult.skipped_names.join(", ")}` : ""} 관리자 직접 등록 사실과 사유가 변경 이력에 남습니다.` });
   }
 
+  const weeklyApprovedTotalAfter = (employeeId: string, workDate: string, proposedMinutes: number, excludeRecordId = "", excludeRequestId = "") => {
+    const week = weekRange(workDate);
+    const regularMinutes = records.filter((record) => record.id !== excludeRecordId && record.employee_id === employeeId && record.work_date >= week.start && record.work_date <= week.end && record.overtime_status === "approved").reduce((sum, record) => sum + (record.approved_overtime_minutes || 0), 0);
+    const emergencyMinutes = requests.filter((request) => request.id !== excludeRequestId && request.employee_id === employeeId && request.request_type === "emergency_support" && request.status === "approved" && request.target_date >= week.start && request.target_date <= week.end).reduce((sum, request) => sum + (request.approved_minutes || request.calculated_minutes || 0), 0);
+    return { ...week, total: regularMinutes + emergencyMinutes + proposedMinutes };
+  };
+
+  async function acknowledgeWeeklyOvertimeIfRequired(employeeId: string, workDate: string, proposedMinutes: number, excludeRecordId = "", excludeRequestId = "") {
+    const weekly = weeklyApprovedTotalAfter(employeeId, workDate, proposedMinutes, excludeRecordId, excludeRequestId);
+    if (weekly.total <= 720) return { ok: true, notice: "" };
+    const reason = window.prompt(`${weekly.start}부터 ${weekly.end}까지 승인된 일반 시간외와 긴급지원 합계가 ${formatMinutes(weekly.total)}으로 주 12시간을 넘습니다.\n\n초과 승인 사유를 5자 이상 입력해 주세요. 승인자, 합계와 사유가 변경 이력에 남습니다.`) || "";
+    if (reason.trim().length < 5) return { ok: false, notice: "" };
+    if (!supabase) return { ok: true, notice: `주간 합계 ${formatMinutes(weekly.total)} 초과 승인 사유를 기록했습니다.` };
+    const { error } = await supabase.rpc("acknowledge_weekly_overtime_override", { p_employee_id: employeeId, p_work_date: workDate, p_proposed_total_minutes: weekly.total, p_reason: reason.trim() });
+    if (error) {
+      setNotice({ tone: "error", text: `주 12시간 초과 승인 확인을 서버에 기록하지 못했습니다${error.code ? ` (오류코드 ${error.code})` : ""}. 데이터베이스 보완 SQL 적용 여부를 확인해 주세요.` });
+      return { ok: false, notice: "" };
+    }
+    return { ok: true, notice: `주간 합계 ${formatMinutes(weekly.total)} 초과 승인 사유를 변경 이력에 기록했습니다.` };
+  }
+
   async function createEmergencySupportWork(form: HTMLFormElement) {
     if (!supabase || !currentProfile || !isAdminRole(effectiveRole)) return;
     const client = supabase;
@@ -1729,7 +1750,12 @@ export default function AttendanceApp() {
     const overlappingNames = employeeIds.filter((employeeId) => overlappingEmergencyRequests(requests, employeeId, sharedPayload.p_start_date, sharedPayload.p_end_date, sharedPayload.p_start_time, sharedPayload.p_end_time).length > 0).map((employeeId) => profiles.find((person) => person.id === employeeId)?.name || "미확인 직원");
     if (overlappingNames.length > 0) { setNotice({ tone: "warning", text: `이미 등록된 긴급지원 시간과 겹칩니다: ${overlappingNames.join(", ")}. 기존 기록의 시간을 확인한 뒤 다시 등록해 주세요.` }); return; }
     setBusy(true);
-    const results = await Promise.all(employeeIds.map((employeeId) => client.rpc("admin_create_emergency_support_work", { ...sharedPayload, p_employee_id: employeeId })));
+    const results: Array<{ error: { message?: string; code?: string } | null }> = [];
+    for (const employeeId of employeeIds) {
+      const acknowledgement = await acknowledgeWeeklyOvertimeIfRequired(employeeId, sharedPayload.p_start_date, minutes);
+      if (!acknowledgement.ok) { setBusy(false); return; }
+      results.push(await client.rpc("admin_create_emergency_support_work", { ...sharedPayload, p_employee_id: employeeId }));
+    }
     setBusy(false);
     const failedResults = employeeIds.map((id, index) => ({ id, error: results[index].error })).filter((item) => Boolean(item.error));
     if (failedResults.length) {
@@ -1804,20 +1830,19 @@ export default function AttendanceApp() {
 
   async function reviewRequest(request: CorrectionRequest, decision: "approved" | "rejected" | "more_info") {
     let weeklyNotice = "";
-    if (decision === "approved" && request.request_type === "emergency_support") {
-      const week = weekRange(request.target_date);
-      const regularMinutes = records.filter((record) => record.employee_id === request.employee_id && record.work_date >= week.start && record.work_date <= week.end && record.overtime_status === "approved").reduce((sum, record) => sum + (record.approved_overtime_minutes || 0), 0);
-      const otherEmergencyMinutes = requests.filter((item) => item.id !== request.id && item.employee_id === request.employee_id && item.request_type === "emergency_support" && item.status === "approved" && item.target_date >= week.start && item.target_date <= week.end).reduce((sum, item) => sum + (item.approved_minutes || item.calculated_minutes || 0), 0);
-      const proposedMinutes = request.calculated_minutes || Number(request.requested_value) || 0;
-      const weeklyTotal = regularMinutes + otherEmergencyMinutes + proposedMinutes;
-      if (weeklyTotal > 720) weeklyNotice = `${week.start}부터 ${week.end}까지 승인된 일반 시간외와 긴급지원 합계가 ${formatMinutes(weeklyTotal)}으로 주 12시간을 넘습니다. 참고용 안내이며 승인은 그대로 처리됐습니다.`;
+    if (decision === "approved" && ["emergency_support", "overtime"].includes(request.request_type)) {
+      const linkedRecord = records.find((record) => record.id === request.attendance_record_id) || records.find((record) => record.employee_id === request.employee_id && record.work_date === request.target_date);
+      const proposedMinutes = request.request_type === "overtime" ? Math.min(request.calculated_minutes || Number(request.requested_value) || 0, linkedRecord?.recorded_overtime_minutes || 0) : request.calculated_minutes || Number(request.requested_value) || 0;
+      const acknowledgement = await acknowledgeWeeklyOvertimeIfRequired(request.employee_id, request.target_date, proposedMinutes, request.request_type === "overtime" ? linkedRecord?.id || "" : "", request.request_type === "emergency_support" ? request.id : "");
+      if (!acknowledgement.ok) return;
+      weeklyNotice = acknowledgement.notice;
     }
     const comment = window.prompt(decision === "approved" ? "승인 의견을 입력해 주세요. 선택 입력입니다." : "처리 의견을 입력해 주세요.") ?? "";
     if (decision !== "approved" && !comment.trim()) return;
     if (supabase) {
       const reviewFunction = request.request_type === "emergency_support" ? "review_emergency_support_work" : "review_correction_request";
       const { error } = await supabase.rpc(reviewFunction, { p_request_id: request.id, p_decision: decision, p_comment: comment });
-      if (error) { const message = String(error.message || ""); setNotice({ tone: "error", text: message.includes("EMERGENCY_SUPPORT_TIME_OVERLAP") ? "다른 긴급지원 기록과 시간이 겹쳐 승인할 수 없습니다. 실제시간을 수정하거나 중복 기록을 반려해 주세요." : message.includes("WEEKLY_OVERTIME_LIMIT") ? "이 요청을 승인하면 같은 주의 시간외근무가 12시간을 넘습니다." : message.includes("ACTUAL_OVERTIME_REQUIRED") ? "실제 퇴근기록에서 인정 가능한 시간외근무가 아직 확인되지 않았습니다. 퇴근기록이 저장된 뒤 승인해 주세요." : message.includes("COMP_TIME_BALANCE_INSUFFICIENT") ? "대체휴무 잔액이 부족해 승인할 수 없습니다. 적립내역을 확인하거나 예외 연장 후 다시 승인해 주세요." : message.includes("ANNUAL_LEAVE_BALANCE_INSUFFICIENT") ? "연차 잔액이 부족해 승인할 수 없습니다." : message.includes("ANNUAL_LEAVE_ENTITLEMENT_REQUIRED") ? "해당 기간의 연차 부여내역이 없습니다. 먼저 휴가 잔액 화면에서 연차를 등록해 주세요." : "요청을 처리하지 못했습니다. 권한, 월 마감 상태, 최신 데이터베이스 보완 SQL 적용 여부를 확인해 주세요." }); return; }
+      if (error) { const message = String(error.message || ""); setNotice({ tone: "error", text: message.includes("WEEKLY_OVERTIME_OVERRIDE_REQUIRED") ? "주 12시간 초과 승인 확인이 없거나 만료됐습니다. 다시 승인하고 초과 사유를 입력해 주세요." : message.includes("EMERGENCY_SUPPORT_TIME_OVERLAP") ? "다른 긴급지원 기록과 시간이 겹쳐 승인할 수 없습니다. 실제시간을 수정하거나 중복 기록을 반려해 주세요." : message.includes("WEEKLY_OVERTIME_LIMIT") ? "이 요청을 승인하면 같은 주의 시간외근무가 12시간을 넘습니다." : message.includes("ACTUAL_OVERTIME_REQUIRED") ? "실제 퇴근기록에서 인정 가능한 시간외근무가 아직 확인되지 않았습니다. 퇴근기록이 저장된 뒤 승인해 주세요." : message.includes("COMP_TIME_BALANCE_INSUFFICIENT") ? "대체휴무 잔액이 부족해 승인할 수 없습니다. 적립내역을 확인하거나 예외 연장 후 다시 승인해 주세요." : message.includes("ANNUAL_LEAVE_BALANCE_INSUFFICIENT") ? "연차 잔액이 부족해 승인할 수 없습니다." : message.includes("ANNUAL_LEAVE_ENTITLEMENT_REQUIRED") ? "해당 기간의 연차 부여내역이 없습니다. 먼저 휴가 잔액 화면에서 연차를 등록해 주세요." : "요청을 처리하지 못했습니다. 권한, 월 마감 상태, 최신 데이터베이스 보완 SQL 적용 여부를 확인해 주세요." }); return; }
       if (currentProfile) await loadRemoteData(currentProfile);
     } else {
       setRequests((previous) => previous.map((item) => item.id === request.id ? { ...item, status: decision, reviewer_comment: comment, reviewed_at: new Date().toISOString() } : item));
@@ -1905,11 +1930,9 @@ export default function AttendanceApp() {
         setNotice({ tone: "warning", text: isHolidayWork ? `휴일 시간외근무는 실제 근무 ${formatMinutes(approvalLimit)} 안에서 최초 1시간부터 이후 30분 단위로 승인해 주세요.` : "평일 시간외근무는 최초 1시간부터 이후 30분 단위로, 하루 최대 4시간까지 승인할 수 있습니다." });
         return;
       }
-      const week = weekRange(record.work_date);
-      const otherRegularMinutes = records.filter((item) => item.id !== record.id && item.employee_id === record.employee_id && item.work_date >= week.start && item.work_date <= week.end && item.overtime_status === "approved").reduce((sum, item) => sum + (item.approved_overtime_minutes || 0), 0);
-      const emergencyWeekMinutes = requests.filter((item) => item.employee_id === record.employee_id && item.request_type === "emergency_support" && item.status === "approved" && item.target_date >= week.start && item.target_date <= week.end).reduce((sum, item) => sum + (item.approved_minutes || item.calculated_minutes || 0), 0);
-      const weeklyTotal = otherRegularMinutes + emergencyWeekMinutes + approvedMinutes;
-      if (weeklyTotal > 720) weeklyNotice = `${week.start}부터 ${week.end}까지 승인된 일반 시간외와 긴급지원 합계가 ${formatMinutes(weeklyTotal)}으로 주 12시간을 넘습니다. 참고용 안내이며 승인은 그대로 처리됐습니다.`;
+      const acknowledgement = await acknowledgeWeeklyOvertimeIfRequired(record.employee_id, record.work_date, approvedMinutes, record.id);
+      if (!acknowledgement.ok) return;
+      weeklyNotice = acknowledgement.notice;
       const compTimeLimit = rawMinutes < 60 ? 0 : 60 + Math.ceil((rawMinutes - 60) / 30) * 30;
       const compInput = window.prompt(`대체휴무로 인정할 실제 추가근무 시간을 분 단위로 입력해 주세요. 해당 없으면 0을 입력하세요.\n\n시간외근무 승인시간과 별도로 실제 추가근무 전체를 대체휴무로 적립할 수 있습니다. 최초 1시간부터 이후 30분 단위로 인정합니다.\n현재 적립 가능: 최대 ${formatMinutes(compTimeLimit)}\n예: 실제 추가근무 5시간이면 시간외근무는 최대 4시간, 대체휴무는 5시간 적립 가능`, "0");
       if (compInput === null) return;
@@ -1923,7 +1946,7 @@ export default function AttendanceApp() {
     if (reason.trim().length < 2) return;
     if (supabase) {
       const { error } = await supabase.rpc("admin_review_overtime", { p_record_id: record.id, p_decision: decision, p_approved_minutes: approvedMinutes, p_comp_time_minutes: compTimeCreditMinutes, p_reason: reason });
-      if (error) { const message = String(error.message || ""); setNotice({ tone: "error", text: message.includes("WEEKLY_OVERTIME_LIMIT") ? "이 기록을 승인하면 같은 주의 시간외근무가 12시간을 넘습니다." : message.includes("OVERTIME_REQUEST_LIMIT") ? "직원이 신청한 시간보다 많이 승인할 수 없습니다. 신청시간과 실제 인정 가능시간 중 작은 값으로 승인해 주세요." : message.includes("INVALID_EXTRA_COMP_TIME") ? "대체휴무가 실제 추가근무 인정시간을 넘었거나 1시간 이후 30분 단위가 아닙니다." : `시간외근무를 처리하지 못했습니다${error.code ? ` (오류코드 ${error.code})` : ""}. 최신 데이터베이스 보완 SQL 적용 여부를 확인해 주세요.` }); return; }
+      if (error) { const message = String(error.message || ""); setNotice({ tone: "error", text: message.includes("WEEKLY_OVERTIME_OVERRIDE_REQUIRED") ? "주 12시간 초과 승인 확인이 없거나 만료됐습니다. 다시 승인하고 초과 사유를 입력해 주세요." : message.includes("WEEKLY_OVERTIME_LIMIT") ? "이 기록을 승인하면 같은 주의 시간외근무가 12시간을 넘습니다." : message.includes("OVERTIME_REQUEST_LIMIT") ? "직원이 신청한 시간보다 많이 승인할 수 없습니다. 신청시간과 실제 인정 가능시간 중 작은 값으로 승인해 주세요." : message.includes("INVALID_EXTRA_COMP_TIME") ? "대체휴무가 실제 추가근무 인정시간을 넘었거나 1시간 이후 30분 단위가 아닙니다." : `시간외근무를 처리하지 못했습니다${error.code ? ` (오류코드 ${error.code})` : ""}. 최신 데이터베이스 보완 SQL 적용 여부를 확인해 주세요.` }); return; }
       if (currentProfile) await loadRemoteData(currentProfile);
     } else {
       setRecords((previous) => previous.map((item) => item.id === record.id ? { ...item, overtime_status: decision, approved_overtime_minutes: approvedMinutes } : item));

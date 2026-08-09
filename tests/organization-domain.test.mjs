@@ -650,16 +650,32 @@ test("approved emergency support without attendance stays visible in employee an
   assert.match(app, /record && effectiveClockOutAt\(record, requests\) \? formatTime/);
 });
 
-test("holiday overtime keeps full elapsed time, stays separate from emergency support, and weekly 12 hours is notice only", async () => {
+test("holiday overtime keeps full elapsed time and stays separate from emergency support", async () => {
   const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
   const repair = await readFile(new URL("supabase/repair_weekly_overtime_notice_and_emergency_cancel.sql", root), "utf8");
   assert.doesNotMatch(app, /finishedEmergencyMinutesForRecord/);
-  assert.match(app, /참고용 안내이며 승인은 그대로 처리됐습니다/);
   assert.match(app, /당직/);
   assert.match(repair, /case when v_is_holiday then 0 else v_lunch end/);
   assert.match(repair, /recorded_overtime_minutes between 0 and 1440/);
   assert.match(repair, /admin_cancel_emergency_support_work/);
   assert.match(repair, /emergency_support_approval_cancelled/);
+});
+
+test("weekly overtime over 12 hours requires a server-side acknowledged reason before approval", async () => {
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  const sql = await readFile(new URL("supabase/repair_weekly_overtime_server_override.sql", root), "utf8");
+  const install = await readFile(new URL("supabase/install_current.sql", root), "utf8");
+  assert.match(app, /acknowledge_weekly_overtime_override/);
+  assert.match(app, /초과 승인 사유를 5자 이상/);
+  assert.match(sql, /weekly_overtime_override_acknowledgements/);
+  assert.match(sql, /WEEKLY_OVERTIME_OVERRIDE_REQUIRED/);
+  assert.match(sql, /acknowledged_by = auth\.uid\(\)/);
+  assert.match(sql, /consumed_at is null/);
+  assert.match(sql, /weekly_overtime_override_acknowledged/);
+  assert.match(sql, /before insert or update of overtime_status,approved_overtime_minutes/);
+  assert.match(sql, /before insert or update of status,approved_minutes/);
+  assert.match(install, /repair_weekly_overtime_server_override\.sql/);
+  assert.match(install, /WEEKLY_OVERTIME_OVERRIDE_REQUIRED/);
 });
 
 test("only public developer support is exposed and institution support stays offline", async () => {
