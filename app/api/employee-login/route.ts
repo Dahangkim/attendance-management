@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 
   const adminClient = createServerSupabaseClient(supabaseUrl, secretKey);
   let profileQuery = adminClient.from("profiles")
-    .select("id,email,is_active,org_id,role,must_change_password")
+    .select("id,email,is_active,org_id,role")
     .in("role", ["employee", "team_lead", "org_admin", "admin", "super_admin"])
     .limit(2);
   profileQuery = isEmail
@@ -41,7 +41,10 @@ export async function POST(request: Request) {
     : profileQuery.ilike("employee_number", employeeNumber);
   const { data: profiles, error: profileError } = await profileQuery;
   if (profileError || profiles?.length !== 1 || !profiles[0].is_active) {
-    return rejectLogin(profileError ? "profile_query" : profiles?.length !== 1 ? "profile_match" : "inactive_profile", profileError?.code || "");
+    return rejectLogin(
+      profileError ? "profile_query" : profiles?.length !== 1 ? "profile_match" : "inactive_profile",
+      profileError ? [profileError.code, profileError.message].filter(Boolean).join(":") : "",
+    );
   }
   const profile = profiles[0];
   let organization = null;
@@ -68,7 +71,7 @@ export async function POST(request: Request) {
   }
   if (authError || !authData.session || authData.user.id !== profile.id) return rejectLogin("password", authError?.code || "");
 
-  if (usedLegacyPassword && !profile.must_change_password) {
+  if (usedLegacyPassword) {
     const { error: migrationError } = await adminClient.from("profiles").update({ must_change_password: true }).eq("id", profile.id);
     if (migrationError) return json({ ok: false, code: "PASSWORD_MIGRATION_FAILED" }, 500);
   }

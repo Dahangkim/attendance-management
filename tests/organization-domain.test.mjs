@@ -523,7 +523,7 @@ test("employee login keeps raw passwords and securely migrates legacy short pass
   assert.match(route, /\.ilike\("employee_number", employeeNumber\)/);
   assert.match(route, /toSupabasePassword\(password\)/);
   assert.match(route, /authError && password\.length >= 4 && password\.length < 6/);
-  assert.match(route, /usedLegacyPassword && !profile\.must_change_password/);
+  assert.match(route, /if \(usedLegacyPassword\)/);
   assert.match(route, /update\(\{ must_change_password: true \}\)/);
   assert.match(password, /return password;/);
   assert.doesNotMatch(password, /attendance:/);

@@ -5888,3 +5888,34 @@ notify pgrst, 'reload schema';
 commit;
 
 select '긴급지원 등록과 출퇴근시각 삭제 보완 완료' as result;
+
+
+-- ============================================================================
+-- 로그인 비밀번호 전환 상태 보완
+-- ============================================================================
+
+begin;
+
+alter table public.profiles
+  add column if not exists must_change_password boolean not null default false;
+
+create or replace function public.complete_required_password_change()
+returns void
+language sql
+security invoker
+set search_path = public
+as $$
+  update public.profiles
+  set must_change_password = false,
+      updated_at = now()
+  where id = auth.uid();
+$$;
+
+revoke all on function public.complete_required_password_change() from public, anon;
+grant execute on function public.complete_required_password_change() to authenticated;
+
+notify pgrst, 'reload schema';
+
+commit;
+
+select '로그인 비밀번호 전환 상태 보완 완료' as result;
