@@ -696,3 +696,23 @@ test("only public developer support is exposed and institution support stays off
   assert.doesNotMatch(context, /support_email/);
   assert.doesNotMatch(login, /support_email/);
 });
+
+test("administrator login history is GPS-free and separated by viewer role", async () => {
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  const login = await readFile(new URL("app/api/employee-login/route.ts", root), "utf8");
+  const history = await readFile(new URL("app/api/admin-login-history/route.ts", root), "utf8");
+  const migration = await readFile(new URL("supabase/add_admin_login_history.sql", root), "utf8");
+  const install = await readFile(new URL("supabase/install_current.sql", root), "utf8");
+  assert.match(login, /admin_login_logs/);
+  assert.match(login, /cf-connecting-ip/);
+  assert.match(login, /user-agent/);
+  assert.doesNotMatch(login, /latitude|longitude|geolocation/i);
+  assert.match(history, /actor\.role !== "super_admin"/);
+  assert.match(history, /query = query\.eq\("profile_id", actor\.id\)/);
+  assert.match(history, /actor\.role === "super_admin" \? item\.ip_address : maskIpAddress/);
+  assert.match(migration, /profile_id = auth\.uid\(\)/);
+  assert.match(migration, /current_profile_role\(\) = 'super_admin'/);
+  assert.match(install, /admin_login_logs/);
+  assert.match(app, /관리자 로그인 이력/);
+  assert.match(app, /본인의 로그인 시각, 접속 IP와 기기 정보만/);
+});

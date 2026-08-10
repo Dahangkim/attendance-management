@@ -15,14 +15,14 @@ import { DEFAULT_ACCENT_COLOR, DEFAULT_PRIMARY_COLOR, organizationBranding, type
 import { applicationOwner } from "../lib/application-owner";
 import { isPrivilegedPassword, toSupabasePassword } from "../lib/auth-password";
 import {
-  LOCATION_LABEL, STATUS_LABEL, type AttendanceException, type AttendanceRecord,
+  LOCATION_LABEL, STATUS_LABEL, type AdminLoginLog, type AttendanceException, type AttendanceRecord,
   type AnnualLeaveBalance, type AuditLog, type CompTimeBalance, type CompTimeCredit, type CorrectionRequest, type EmployeeShiftAssignment, type Holiday, type MonthlyOvertimeAfterComp, type Organization, type OrganizationChangeRequest, type OrganizationSettings, type OrganizationWorkPolicy, type Profile,
   type WorkShiftTemplate,
   type Role, type Workplace,
 } from "../lib/types";
 
 type EmployeeView = "today" | "records" | "corrections" | "team_reports" | "report_audit";
-type AdminView = "organizations" | "org_reports" | "approvals" | "dashboard" | "monthly" | "leave_balances" | "exceptions" | "requests" | "audit" | "settings";
+type AdminView = "organizations" | "org_reports" | "approvals" | "dashboard" | "monthly" | "leave_balances" | "exceptions" | "requests" | "audit" | "login_history" | "settings";
 type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 
 type TenantOrganization = OrganizationBrandingSource & { id: string; org_code: string; org_name: string; short_name: string; domain: string | null };
@@ -2631,8 +2631,8 @@ export default function AttendanceApp() {
     ...(currentProfile?.can_view_reports ? [{ id: "team_reports" as const, label: "직원 현황", icon: Download }, { id: "report_audit" as const, label: "변경 이력", icon: History }] : []),
   ];
   const adminNav = effectiveRole === "super_admin"
-    ? [{ id: "organizations" as const, label: "기관 관리", icon: Building2 }, { id: "org_reports" as const, label: "기관별 근태", icon: CalendarDays }, { id: "approvals" as const, label: "변경 승인", icon: ShieldCheck }, { id: "audit" as const, label: "변경 이력", icon: History }, { id: "settings" as const, label: "내 화면 설정", icon: Settings }]
-    : [{ id: "dashboard" as const, label: "대시보드", icon: Building2 }, { id: "monthly" as const, label: "근태 기록", icon: CalendarDays }, { id: "leave_balances" as const, label: "휴가와 대휴", icon: FileClock }, { id: "exceptions" as const, label: "출장과 예외", icon: FileClock }, { id: "requests" as const, label: "신청 승인", icon: PencilLine }, { id: "audit" as const, label: "변경 이력", icon: History }, { id: "settings" as const, label: "설정", icon: Settings }];
+    ? [{ id: "organizations" as const, label: "기관 관리", icon: Building2 }, { id: "org_reports" as const, label: "기관별 근태", icon: CalendarDays }, { id: "approvals" as const, label: "변경 승인", icon: ShieldCheck }, { id: "audit" as const, label: "변경 이력", icon: History }, { id: "login_history" as const, label: "관리자 로그인", icon: LogIn }, { id: "settings" as const, label: "내 화면 설정", icon: Settings }]
+    : [{ id: "dashboard" as const, label: "대시보드", icon: Building2 }, { id: "monthly" as const, label: "근태 기록", icon: CalendarDays }, { id: "leave_balances" as const, label: "휴가와 대휴", icon: FileClock }, { id: "exceptions" as const, label: "출장과 예외", icon: FileClock }, { id: "requests" as const, label: "신청 승인", icon: PencilLine }, { id: "audit" as const, label: "변경 이력", icon: History }, { id: "login_history" as const, label: "내 로그인 이력", icon: LogIn }, { id: "settings" as const, label: "설정", icon: Settings }];
   const selectedOrganization = organizations.find((item) => item.id === selectedOrgId) || null;
 
   return (
@@ -2670,6 +2670,7 @@ export default function AttendanceApp() {
           {isAdminRole(effectiveRole) && adminView === "exceptions" && <ExceptionAdmin exceptions={exceptions} onNew={() => setExceptionOpen(true)} onCancel={(item) => void cancelAttendanceException(item)} />}
           {isAdminRole(effectiveRole) && adminView === "requests" && <RequestAdminWorkspace requests={requests} records={records} emergencySupportEnabled={organizationSettingsDraft.emergency_support_enabled} onReview={reviewRequest} onReopen={(request) => void reopenRequest(request)} onCancelApprovedEmergency={(request) => void cancelApprovedEmergencySupport(request)} onEditRequest={setEditingRequest} onEditRecord={setEditingRecord} onEmergencyWork={() => setEmergencyWorkOpen(true)} />}
           {isAdminRole(effectiveRole) && adminView === "audit" && <AuditView logs={auditLogs} brandTitle={tenantBranding.title} onRestore={(log) => void restoreAttendanceRecord(log)} superAdmin={effectiveRole === "super_admin"} selectedOrgId={effectiveRole === "super_admin" ? selectedOrgId : currentProfile?.org_id || ""} organizations={organizations} organizationChanges={organizationChangeRequests} />}
+          {isAdminRole(effectiveRole) && adminView === "login_history" && <AdminLoginHistoryView superAdmin={effectiveRole === "super_admin"} />}
           {isAdminRole(effectiveRole) && effectiveRole !== "super_admin" && adminView === "settings" && <SettingsView branding={tenantOrganization} draft={settingsDraft} organizationDraft={organizationSettingsDraft} setOrganizationDraft={setOrganizationSettingsDraft} workPolicy={workPolicyDraft} setWorkPolicy={setWorkPolicyDraft} shiftTemplates={shiftTemplates} shiftAssignments={shiftAssignments} organizationChangeRequests={organizationChangeRequests} profiles={profiles} canResetPasswords={["admin", "org_admin"].includes(effectiveRole)} onResetPassword={setResetPasswordTarget} onCreateEmployee={() => setEmployeeCreateOpen(true)} onEditEmployee={setEditingEmployee} onSetEmployeeActive={(person, active) => void setEmployeeActive(person, active)} onToggleReportViewer={(person) => void toggleReportViewer(person)} onSave={saveSettings} onSaveBranding={(form) => void updateOrganizationBranding(form)} onUploadLogo={(file) => uploadOrganizationLogo(file)} onSaveWorkPolicy={() => void saveWorkPolicy()} onCreateShift={(form) => void createShiftTemplate(form)} onSetShiftActive={(template, active) => void setShiftTemplateActive(template, active)} onAssignShift={(form) => void assignEmployeeShift(form)} onRemoveAssignment={(assignment) => void removeShiftAssignment(assignment)} onRequestOrganizationChange={(form, type) => void requestOrganizationChange(form, type)} holidayYear={holidayYear} holidays={holidays} onHolidayYear={setHolidayYear} onSyncHolidays={() => void syncHolidays()} onAddHoliday={() => void addCustomHoliday()} onEditHoliday={(holiday) => void editHoliday(holiday)} onRemoveHoliday={(holiday) => void removeHoliday(holiday)} busy={busy} />}
         </div>
       </main>
@@ -3015,6 +3016,46 @@ function RequestAdmin({ requests, records, onReview, onReopen, onEditRequest, on
       const reviewStatusLabel = unfinishedEmergency ? "지원 진행 중" : request.request_type === "overtime" && request.status === "pending" ? (linkedRecord?.clock_out_at ? "승인 대기" : "퇴근기록 대기") : statusLabels[request.status];
       return <article className="review-card" key={request.id}><div className="review-person"><div className="avatar">{request.employee_name?.slice(0, 1)}</div><div><strong>{request.employee_name}</strong><span>{requestPeriodLabel(request)}, {REQUEST_TYPE_LABEL[request.request_type] || "근태 신청"}</span></div><Badge tone={unfinishedEmergency ? "active" : statusTone(request.status)}>{reviewStatusLabel}</Badge></div><div className="change-box"><div><span>{["clock_in_at", "clock_out_at"].includes(request.request_type) ? "변경 전" : "기존 기록"}</span><strong>{request.before_value.length > 60 ? "기존 기록 있음" : request.before_value}</strong></div><ArrowRight /><div><span>{["clock_in_at", "clock_out_at"].includes(request.request_type) ? "요청 값" : "신청 내용"}</span><strong>{requestValueLabel(request)}</strong></div></div>{request.request_type === "overtime" && <div className="summary-inline"><span>신청 <strong>{formatMinutes(requestedOvertime)}</strong></span><span>실제 인정 가능 <strong>{linkedRecord?.clock_out_at ? formatMinutes(actualOvertime) : "퇴근기록 대기"}</strong></span><span>최대 승인 <strong>{linkedRecord?.clock_out_at ? formatMinutes(overtimeLimit) : "퇴근 후 계산"}</strong></span></div>}<div className="reason-box"><span>신청 사유</span><p>{request.reason}</p></div>{request.reviewed_at && <small>{request.reviewer_name || "관리자"} 처리, {formatDate(request.reviewed_at)} {formatTime(request.reviewed_at)}{request.reviewer_comment ? `, ${request.reviewer_comment}` : ""}</small>}<div className="review-actions">{isOpen ? <><button className="reject-button" onClick={() => onReview(request, "rejected")}><X /> 반려</button>{!unfinishedEmergency && <button className="secondary-button" onClick={() => onEditRequest(request)}><PencilLine /> 내용 수정</button>}<button className="secondary-button" onClick={() => onReview(request, "more_info")}><AlertCircle /> 추가정보 요청</button><button className="approve-button" onClick={() => onReview(request, "approved")} disabled={unfinishedEmergency || request.request_type === "overtime" && overtimeLimit <= 0}><Check /> {unfinishedEmergency ? "종료 후 승인" : "승인"}</button></> : appliedClockRequest ? linkedRecord && <button className="secondary-button" onClick={() => onEditRecord(linkedRecord)}><PencilLine /> 연결된 근태기록 수정</button> : <><button className="secondary-button" onClick={() => onEditRequest(request)}><PencilLine /> 내용 수정</button><button className="secondary-button" onClick={() => onReopen(request)}><RefreshCw /> 재검토</button></>}</div></article>;
     })}{visible.length === 0 && <EmptyState title="표시할 요청이 없습니다" text="선택한 달과 처리상태에 해당하는 요청이 없습니다." />}</div>
+  </section>;
+}
+
+const loginDeviceLabel = (userAgent: string) => {
+  if (!userAgent || userAgent === "기기 정보 확인 불가") return "기기 정보 확인 불가";
+  const device = /iPhone/i.test(userAgent) ? "iPhone" : /iPad/i.test(userAgent) ? "iPad" : /Android/i.test(userAgent) ? "Android" : /Macintosh|Mac OS X/i.test(userAgent) ? "Mac" : /Windows/i.test(userAgent) ? "Windows" : /Linux/i.test(userAgent) ? "Linux" : "기타 기기";
+  const browser = /Edg\//i.test(userAgent) ? "Edge" : /OPR\//i.test(userAgent) ? "Opera" : /CriOS|Chrome\//i.test(userAgent) ? "Chrome" : /FxiOS|Firefox\//i.test(userAgent) ? "Firefox" : /Safari\//i.test(userAgent) ? "Safari" : "브라우저 미확인";
+  return `${device} · ${browser}`;
+};
+
+function AdminLoginHistoryView({ superAdmin }: { superAdmin: boolean }) {
+  const [loginMonth, setLoginMonth] = useState(monthKey());
+  const [logs, setLogs] = useState<AdminLoginLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  useEffect(() => {
+    if (!supabase) { setLoading(false); return; }
+    let cancelled = false;
+    setLoading(true);
+    setLoadError("");
+    void supabase.auth.getSession().then(async ({ data }) => {
+      const response = await fetch(`/api/admin-login-history?month=${encodeURIComponent(loginMonth)}`, {
+        headers: { Authorization: `Bearer ${data.session?.access_token || ""}` },
+        cache: "no-store",
+      }).catch(() => null);
+      const result = response ? await response.json().catch(() => ({})) as { logs?: AdminLoginLog[] } : {};
+      if (cancelled) return;
+      if (!response?.ok || !Array.isArray(result.logs)) {
+        setLogs([]);
+        setLoadError("로그인 이력을 불러오지 못했습니다. 잠시 후 다시 확인해 주세요.");
+      } else setLogs(result.logs);
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [loginMonth]);
+  return <section>
+    <div className="page-heading"><div><span className="kicker">접속 보안</span><h1>{superAdmin ? "관리자 로그인 이력" : "내 로그인 이력"}</h1><p>{superAdmin ? "모든 기관관리자와 최고관리자의 로그인 시각, 접속 IP와 기기 정보를 확인합니다." : "본인의 로그인 시각, 접속 IP와 기기 정보만 확인할 수 있습니다."}</p></div></div>
+    <div className="toolbar-card"><MonthPicker value={loginMonth} onChange={setLoginMonth} /><Badge tone="neutral">총 {logs.length}건</Badge></div>
+    <div className="table-card"><div className="table-scroll"><table><thead><tr><th>로그인 시각</th>{superAdmin && <th>기관</th>}<th>관리자</th><th>권한</th><th>접속 IP</th><th>기기와 브라우저</th></tr></thead><tbody>{logs.map((log) => <tr key={log.id}><td>{formatDate(log.created_at)} {formatTime(log.created_at)}</td>{superAdmin && <td>{log.organization_name || "기관 미확인"}</td>}<td><strong>{log.profile_name || "관리자"}</strong></td><td>{log.role === "super_admin" ? "최고관리자" : "기관관리자"}</td><td>{log.ip_address}</td><td>{loginDeviceLabel(log.device_info)}</td></tr>)}</tbody></table>{loading && <EmptyState title="로그인 이력을 불러오는 중입니다" text="잠시만 기다려 주세요." />}{!loading && loadError && <EmptyState title="로그인 이력을 불러오지 못했습니다" text={loadError} />}{!loading && !loadError && logs.length === 0 && <EmptyState title="로그인 이력이 없습니다" text="선택한 달에 기록된 관리자 로그인이 없습니다." />}</div></div>
+    <p className="card-description">로그인 이력은 1년간 보관합니다. 기관관리자 화면에서는 IP 일부가 가려져 표시됩니다.</p>
   </section>;
 }
 

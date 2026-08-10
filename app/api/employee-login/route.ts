@@ -9,6 +9,11 @@ const responseHeaders = { "Cache-Control": "no-store" };
 const json = (body: Record<string, unknown>, status = 200) => Response.json(body, { status, headers: responseHeaders });
 const rejectLogin = () => json({ ok: false, code: "INVALID_CREDENTIALS" }, 401);
 
+const requestIpAddress = (request: Request) => {
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return (request.headers.get("cf-connecting-ip") || forwarded || request.headers.get("x-real-ip") || "확인 불가").slice(0, 64);
+};
+
 export async function POST(request: Request) {
   const supabaseUrl = runtimeEnv.NEXT_PUBLIC_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = runtimeEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -59,6 +64,16 @@ export async function POST(request: Request) {
   const authClient = createServerSupabaseClient(supabaseUrl, publishableKey);
   const { data: authData, error: authError } = await authClient.auth.signInWithPassword({ email: authEmail, password: toSupabasePassword(password) });
   if (authError || !authData.session || authData.user.id !== profile.id) return rejectLogin();
+  if (["org_admin", "admin", "super_admin"].includes(profile.role)) {
+    await adminClient.from("admin_login_logs").insert({
+      org_id: profile.org_id,
+      profile_id: profile.id,
+      role: profile.role,
+      ip_address: requestIpAddress(request),
+      device_info: (request.headers.get("user-agent") || "기기 정보 확인 불가").slice(0, 500),
+    }).then(() => adminClient.from("admin_login_logs").delete().lt("created_at", new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()))
+      .catch(() => undefined);
+  }
   return json({
     ok: true,
     organization,

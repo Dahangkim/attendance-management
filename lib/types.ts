@@ -162,6 +162,18 @@ export interface AuditLog {
   target_work_date?: string | null;
 }
 
+export interface AdminLoginLog {
+  id: string;
+  org_id: string | null;
+  organization_name?: string;
+  profile_id: string;
+  profile_name?: string;
+  role: "org_admin" | "admin" | "super_admin";
+  ip_address: string;
+  device_info: string;
+  created_at: string;
+}
+
 export interface AttendanceException {
   id: string;
   employee_id: string;
