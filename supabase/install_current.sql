@@ -5075,12 +5075,19 @@ end $$;
 create or replace function public.sync_approved_request_to_attendance_exception()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare
-  v_default_start time := coalesce((select default_start_time from public.organization_settings where id = true),time '09:00');
-  v_default_end time := coalesce((select default_end_time from public.organization_settings where id = true),time '18:00');
+  v_default_start time := time '09:00';
+  v_default_end time := time '18:00';
   v_end_date date := coalesce(new.end_date,new.target_date);
   v_exception_type text;
   v_should_create boolean := false;
 begin
+  select coalesce(settings.default_start_time,time '09:00'),
+         coalesce(settings.default_end_time,time '18:00')
+  into v_default_start,v_default_end
+  from public.organization_settings settings
+  where settings.org_id = new.org_id;
+  v_default_start := coalesce(v_default_start,time '09:00');
+  v_default_end := coalesce(v_default_end,time '18:00');
   if coalesce(new.before_value,'') = '관리자 직접 등록' then return new; end if;
   if new.status = 'approved' then
     if new.request_type = 'business_trip' then v_exception_type := 'business_trip'; v_should_create := true;

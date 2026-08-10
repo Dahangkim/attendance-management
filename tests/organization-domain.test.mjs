@@ -664,6 +664,16 @@ test("holiday overtime keeps full elapsed time and stays separate from emergency
   assert.match(repair, /emergency_support_approval_cancelled/);
 });
 
+test("unified request exception sync uses the request organization settings", async () => {
+  const repair = await readFile(new URL("supabase/repair_multi_org_request_exception_21000.sql", root), "utf8");
+  const install = await readFile(new URL("supabase/install_current.sql", root), "utf8");
+  for (const sql of [repair, install]) {
+    assert.match(sql, /where settings\.org_id = new\.org_id/);
+    const definition = sql.slice(sql.lastIndexOf("create or replace function public.sync_approved_request_to_attendance_exception"));
+    assert.doesNotMatch(definition, /organization_settings where id = true/);
+  }
+});
+
 test("weekly overtime over 12 hours requires a server-side acknowledged reason before approval", async () => {
   const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
   const sql = await readFile(new URL("supabase/repair_weekly_overtime_server_override.sql", root), "utf8");
