@@ -684,6 +684,22 @@ test("attendance applications are separated from clock correction requests", asy
   assert.ok(css.includes(".request-category-tabs"));
 });
 
+test("weekday overtime requests exclude regular organization work hours", async () => {
+  const app = await read("app/attendance-app.tsx");
+  const sql = await read("supabase/repair_overtime_request_regular_hours.sql");
+  const install = await read("supabase/install_current.sql");
+  for (const source of [sql, install]) {
+    assert.ok(source.includes("calculate_overtime_request_minutes"));
+    assert.ok(source.includes("v_settings.default_start_time"));
+    assert.ok(source.includes("v_settings.default_end_time"));
+    assert.ok(source.includes("organization_holidays"));
+    assert.ok(source.includes("where org_id = p_org_id"));
+  }
+  assert.ok(app.includes("const beforeWork = Math.max(0, Math.min(until, regularStart) - from)"));
+  assert.ok(app.includes("const afterWork = Math.max(0, until - Math.max(from, regularEnd))"));
+  assert.ok(app.includes("if (isHoliday) return until - from"));
+});
+
 test("dashboard location count excludes records completed by an admin", async () => {
   const app = await read("app/attendance-app.tsx");
   assert.ok(app.includes('todayRows.filter((r) => ["location_review", "admin_review"].includes(r.attendance_status)).length'));

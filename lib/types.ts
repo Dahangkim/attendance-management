@@ -207,6 +207,7 @@ export interface OrganizationSettings {
   early_leave_grace_minutes: number;
   office_ip_address: string;
   emergency_support_enabled: boolean;
+  work_days?: number[];
 }
 
 export interface OrganizationWorkPolicy {

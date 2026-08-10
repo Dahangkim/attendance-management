@@ -161,9 +161,23 @@ const readableTextColor = (hex: string) => {
   return luminance > 0.45 ? "#17211d" : "#ffffff";
 };
 const timeToMinutes = (value: string) => { const [hour, minute] = value.split(":").map(Number); return hour * 60 + minute; };
-const calculateRequestedMinutes = (requestType: string, startDate: string, endDate: string, startTime: string, endTime: string) => {
+const calculateRequestedMinutes = (requestType: string, startDate: string, endDate: string, startTime: string, endTime: string, settings = DEFAULT_ORGANIZATION_SETTINGS, holidays: Holiday[] = []) => {
   if (!startDate || !endDate || !startTime || !endTime) return 0;
-  if (requestType === "overtime") return startDate === endDate ? Math.max(0, timeToMinutes(endTime) - timeToMinutes(startTime)) : 0;
+  if (requestType === "overtime") {
+    if (startDate !== endDate) return 0;
+    const from = timeToMinutes(startTime);
+    const until = timeToMinutes(endTime);
+    if (until <= from) return 0;
+    const workDays = settings.work_days || [1, 2, 3, 4, 5];
+    const day = new Date(`${startDate}T12:00:00+09:00`).getDay() || 7;
+    const isHoliday = !workDays.includes(day) || holidays.some((holiday) => holiday.holiday_date === startDate);
+    if (isHoliday) return until - from;
+    const regularStart = timeToMinutes(settings.default_start_time.slice(0, 5));
+    const regularEnd = timeToMinutes(settings.default_end_time.slice(0, 5));
+    const beforeWork = Math.max(0, Math.min(until, regularStart) - from);
+    const afterWork = Math.max(0, until - Math.max(from, regularEnd));
+    return beforeWork + afterWork;
+  }
   if (requestType === "emergency_support") {
     const from = new Date(`${startDate}T${startTime}:00+09:00`);
     const until = new Date(`${endDate}T${endTime}:00+09:00`);
@@ -244,7 +258,7 @@ const isLikelyDesktop = () => {
     && Math.min(window.screen.width, window.screen.height) <= 820;
   return !phoneSizedTouchScreen;
 };
-const DEFAULT_ORGANIZATION_SETTINGS: OrganizationSettings = { id: true, timezone: "Asia/Seoul", default_start_time: "09:00", default_end_time: "18:00", break_minutes: 60, late_grace_minutes: 0, early_leave_grace_minutes: 0, office_ip_address: "", emergency_support_enabled: true };
+const DEFAULT_ORGANIZATION_SETTINGS: OrganizationSettings = { id: true, timezone: "Asia/Seoul", default_start_time: "09:00", default_end_time: "18:00", break_minutes: 60, late_grace_minutes: 0, early_leave_grace_minutes: 0, office_ip_address: "", emergency_support_enabled: true, work_days: [1, 2, 3, 4, 5] };
 const DEFAULT_WORK_POLICY: OrganizationWorkPolicy = { org_id: "", attendance_mode: "fixed", work_date_boundary_time: "04:00", max_open_shift_hours: 24, overtime_rounding_minutes: 30, holiday_work_counts_as_overtime: true, require_location: true, require_office_ip: false };
 const DEPLOYMENT_BRANDING = deploymentBrandingSource();
 const SUPER_ADMIN_BRANDING: OrganizationBrandingSource = { ...DEPLOYMENT_BRANDING, org_code: "super-admin", short_name: "통합관리", brand_subtitle: "최고관리자 전용" };
@@ -1596,7 +1610,7 @@ export default function AttendanceApp() {
     const endDate = isTimeCorrection || requestType === "overtime" ? targetDate : String(data.get("end_date"));
     const startTime = isTimeCorrection ? null : String(data.get("start_time"));
     const endTime = isTimeCorrection ? null : String(data.get("end_time"));
-    const calculatedMinutes = isTimeCorrection ? 0 : calculateRequestedMinutes(requestType, targetDate, endDate, startTime || "", endTime || "");
+    const calculatedMinutes = isTimeCorrection ? 0 : calculateRequestedMinutes(requestType, targetDate, endDate, startTime || "", endTime || "", organizationSettingsDraft, holidays);
     const requestedValue = isTimeCorrection ? String(data.get("requested_value")) : String(calculatedMinutes);
     if (requestType === "comp_time") {
       const available = compTimeBalances.find((item) => item.employee_id === currentProfile.id)?.available_comp_time_minutes || 0;
