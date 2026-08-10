@@ -54,15 +54,34 @@ export async function POST(request: Request) {
   const { data: organization, error } = await client.from("organizations").insert({
     org_code: orgCode, org_name: orgName, short_name: shortName,
     organization_type: "facility", domain: domain || null, is_active: true,
+    brand_title: `${shortName} 근태관리`,
+    brand_short_title: `${shortName} 근태`,
+    brand_description: `${orgName} 출퇴근 기록과 월별 근태관리를 위한 내부 웹앱`,
+    brand_subtitle: "안전한 내부 기록",
+    brand_mark: Array.from(shortName)[0] || "기",
+    brand_primary_color: "#173f35",
+    brand_accent_color: "#d7e86b",
   }).select("*").single();
   if (error || !organization) return json({ ok: false, code: /unique|duplicate/i.test(error?.message || "") ? "ORGANIZATION_EXISTS" : "ORGANIZATION_CREATE_FAILED" }, 409);
-  await client.from("organization_settings").insert({ id: true, org_id: organization.id, updated_by: actor.id });
-  await client.from("organization_work_policies").insert({ org_id: organization.id, attendance_mode: "fixed", updated_by: actor.id });
-  await client.from("attendance_audit_logs").insert({
+  const { error: settingsError } = await client.from("organization_settings").insert({ id: true, org_id: organization.id, updated_by: actor.id });
+  const { error: policyError } = settingsError
+    ? { error: null }
+    : await client.from("organization_work_policies").insert({ org_id: organization.id, attendance_mode: "fixed", updated_by: actor.id });
+  const { error: auditError } = settingsError || policyError ? { error: null } : await client.from("attendance_audit_logs").insert({
     employee_id: actor.id, action_type: "organization_created", changed_field: "organization",
     before_value: "없음", after_value: JSON.stringify({ org_name: organization.org_name, short_name: organization.short_name, org_code: organization.org_code }),
     reason: "최고관리자가 기관을 직접 만들었습니다.", changed_by: actor.id, changed_by_role: actor.role, org_id: organization.id,
   });
+  if (settingsError || policyError || auditError) {
+    await client.from("attendance_audit_logs").delete().eq("org_id", organization.id);
+    await client.from("organization_work_policies").delete().eq("org_id", organization.id);
+    await client.from("organization_settings").delete().eq("org_id", organization.id);
+    await client.from("organizations").delete().eq("id", organization.id);
+    const code = settingsError ? "ORGANIZATION_SETTINGS_CREATE_FAILED"
+      : policyError ? "ORGANIZATION_POLICY_CREATE_FAILED"
+        : "AUDIT_LOG_SAVE_FAILED";
+    return json({ ok: false, code }, 500);
+  }
   return json({ ok: true, organization }, 201);
 }
 

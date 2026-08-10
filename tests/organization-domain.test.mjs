@@ -280,6 +280,13 @@ test("super administrators create and select organizations from the application"
   assert.match(app, /관리자 목록/);
   assert.match(organizationsRoute, /organizationAdmins/);
   assert.match(organizationsRoute, /\.eq\("role", "org_admin"\)/);
+  assert.match(organizationsRoute, /brand_title: `\$\{shortName\} 근태관리`/);
+  assert.match(organizationsRoute, /brand_description: `\$\{orgName\} 출퇴근 기록/);
+  assert.match(organizationsRoute, /ORGANIZATION_SETTINGS_CREATE_FAILED/);
+  assert.match(organizationsRoute, /ORGANIZATION_POLICY_CREATE_FAILED/);
+  assert.match(organizationsRoute, /attendance_audit_logs"\)\.delete\(\)\.eq\("org_id", organization\.id\)/);
+  assert.match(app, /기관 코드와 기관명을 다시 확인해 주세요/);
+  assert.match(app, /기관 생성 이력을 저장하지 못해 등록을 취소했습니다/);
   assert.match(app, /조회 기관/);
   assert.match(app, /if \(userProfile\.role === "super_admin"\)/);
   assert.match(app, /setRecords\(\[\]\)/);

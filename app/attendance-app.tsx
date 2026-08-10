@@ -856,7 +856,15 @@ export default function AttendanceApp() {
     const result = response ? await response.json().catch(() => ({})) as { organization?: Organization; code?: string } : {};
     setBusy(false);
     if (!response?.ok || !result.organization) {
-      setNotice({ tone: "error", text: result.code === "ORGANIZATION_EXISTS" ? "같은 기관 코드나 도메인이 이미 등록되어 있습니다." : "기관을 만들지 못했습니다." });
+      const message = result.code === "ORGANIZATION_EXISTS" ? "같은 기관 코드나 도메인이 이미 등록되어 있습니다."
+        : result.code === "INVALID_INPUT" ? "기관 코드와 기관명을 다시 확인해 주세요. 기관 코드는 영문 소문자, 숫자와 하이픈만 사용할 수 있습니다."
+          : result.code === "ORGANIZATION_SETTINGS_CREATE_FAILED" ? "기관의 기본 설정을 만들지 못했습니다. 데이터베이스 기관별 설정 구조를 확인해 주세요."
+            : result.code === "ORGANIZATION_POLICY_CREATE_FAILED" ? "기관의 기본 근무정책을 만들지 못했습니다. 데이터베이스 근무정책 구조를 확인해 주세요."
+              : result.code === "AUDIT_LOG_SAVE_FAILED" ? "기관 생성 이력을 저장하지 못해 등록을 취소했습니다."
+                : result.code === "AUTH_REQUIRED" ? "로그인이 만료되었습니다. 다시 로그인해 주세요."
+                  : result.code === "SUPER_ADMIN_REQUIRED" ? "최고관리자 권한을 확인할 수 없습니다."
+                    : "기관을 만들지 못했습니다. 잠시 후 다시 시도해 주세요.";
+      setNotice({ tone: "error", text: message });
       return;
     }
     form.reset();
