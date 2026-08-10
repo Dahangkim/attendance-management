@@ -65,14 +65,18 @@ export async function POST(request: Request) {
   const { data: authData, error: authError } = await authClient.auth.signInWithPassword({ email: authEmail, password: toSupabasePassword(password) });
   if (authError || !authData.session || authData.user.id !== profile.id) return rejectLogin();
   if (["org_admin", "admin", "super_admin"].includes(profile.role)) {
-    await adminClient.from("admin_login_logs").insert({
-      org_id: profile.org_id,
-      profile_id: profile.id,
-      role: profile.role,
-      ip_address: requestIpAddress(request),
-      device_info: (request.headers.get("user-agent") || "기기 정보 확인 불가").slice(0, 500),
-    }).then(() => adminClient.from("admin_login_logs").delete().lt("created_at", new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()))
-      .catch(() => undefined);
+    try {
+      const { error: loginLogError } = await adminClient.from("admin_login_logs").insert({
+        org_id: profile.org_id,
+        profile_id: profile.id,
+        role: profile.role,
+        ip_address: requestIpAddress(request),
+        device_info: (request.headers.get("user-agent") || "기기 정보 확인 불가").slice(0, 500),
+      });
+      if (!loginLogError) await adminClient.from("admin_login_logs").delete().lt("created_at", new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString());
+    } catch {
+      // 로그인 이력 저장 장애가 실제 로그인을 막지 않도록 합니다.
+    }
   }
   return json({
     ok: true,
