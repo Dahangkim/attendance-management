@@ -2480,7 +2480,18 @@ export default function AttendanceApp() {
       rows.push({ id: `emergency-${request.id}-${request.target_date}`, employee_id: request.employee_id, employee_name: request.employee_name || profiles.find((profile) => profile.id === request.employee_id)?.name, work_date: request.target_date, work_type: "approved_other", clock_in_at: null, clock_out_at: null, clock_in_accuracy: null, clock_in_distance: null, clock_in_location_status: "not_checked", clock_out_accuracy: null, clock_out_distance: null, clock_out_location_status: "not_checked", attendance_status: "holiday_work", note: "", is_closed: false });
       keys.add(key);
     });
-    return rows.sort((a, b) => a.work_date.localeCompare(b.work_date) || (a.employee_name || "").localeCompare(b.employee_name || ""));
+    const visibleRows = rows.filter((record) => {
+      const date = new Date(`${record.work_date}T12:00:00+09:00`);
+      const isHoliday = [0, 6].includes(date.getDay()) || holidays.some((holiday) => holiday.holiday_date === record.work_date);
+      if (!isHoliday) return true;
+      const hasActualWork = Boolean(record.clock_in_at || record.clock_out_at)
+        || (record.recorded_overtime_minutes || 0) > 0
+        || approvedEmergencyMinutesForRecord(record, requests) > 0
+        || record.work_type === "business_trip"
+        || ["business_trip", "education", "holiday_work"].includes(record.attendance_status) && record.id.startsWith("exception-");
+      return hasActualWork;
+    });
+    return visibleRows.sort((a, b) => a.work_date.localeCompare(b.work_date) || (a.employee_name || "").localeCompare(b.employee_name || ""));
   }
 
   function exportCsv(rows: AttendanceRecord[]) {
