@@ -734,8 +734,10 @@ test("monthly attendance shows every approved leave, overtime reasons, and excep
   assert.ok(app.includes("left.target_date.localeCompare(right.target_date)"));
   assert.ok(app.includes("left.start_date.localeCompare(right.start_date)"));
   assert.ok(app.includes('useState<"latest" | "oldest">("latest")'));
-  assert.ok(app.includes("최근 날짜 먼저"));
-  assert.ok(app.includes("과거 날짜 먼저"));
+  assert.ok(app.includes('useState<"today" | "week" | "month">("month")'));
+  assert.ok(app.includes('aria-label="근태기록 조회 기간"'));
+  assert.ok(app.includes('className="date-sort-button"'));
+  assert.ok(app.includes("setShowApprovedLeaves"));
   assert.ok(app.includes('log.action_type === "overtime_review"'));
   assert.ok(app.includes("overtimeReasonForRecord(record, requests, auditLogs)"));
   assert.ok(app.includes("승인된 휴가와 대체휴무"));

@@ -441,9 +441,18 @@ tbody tr:hover { background: #fafaf7; }
 .admin-review-panel > div:last-child { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 .admin-review-panel button { padding: 8px 10px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid #d7a64b; border-radius: 8px; background: white; color: #765013; font-weight: 700; }
 .approved-leave-panel { margin-bottom: 18px; padding: 17px 18px; border: 1px solid #cfded7; border-radius: 14px; background: #f5faf7; }
+.approved-leave-panel.collapsed { padding-top: 12px; padding-bottom: 12px; }
+.approved-leave-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 14px; border: 0; background: transparent; color: var(--text); text-align: left; }
+.approved-leave-toggle > span { display: grid; gap: 3px; }
+.approved-leave-toggle small { color: var(--muted); font-weight: 500; }
 .approved-leave-panel > div { margin-top: 9px; display: grid; gap: 7px; }
 .approved-leave-panel span { padding: 9px 11px; border-radius: 9px; background: white; color: var(--muted); font-size: 13px; }
+.approved-leave-panel .approved-leave-toggle > span { padding: 0; background: transparent; }
 .approved-leave-panel b { margin-right: 5px; color: var(--text); }
+.quick-range-tabs { display: flex; gap: 5px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+.quick-range-tabs button { padding: 8px 11px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-weight: 800; white-space: nowrap; }
+.quick-range-tabs button.active { background: var(--green); color: var(--green-contrast); }
+.date-sort-button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 800; white-space: nowrap; }
 .request-admin-toolbar { gap: 14px; }
 .request-status-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .request-status-tabs button { padding: 8px 12px; border: 1px solid var(--line); border-radius: 9px; background: white; color: var(--muted); font-weight: 700; }
