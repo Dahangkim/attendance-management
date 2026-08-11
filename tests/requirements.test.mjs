@@ -727,6 +727,9 @@ test("monthly attendance shows every approved leave, overtime reasons, and excep
   assert.ok(app.includes('["annual_leave", "comp_time", "sick_leave", "special_leave", "other_leave", "business_trip"]'));
   assert.ok(app.includes('id: `request-${request.id}-${workDate}`'));
   assert.ok(app.includes("예외 일정 자동 표시"));
+  assert.ok(app.includes("const attendanceDates = new Set"));
+  assert.ok(app.includes("{tripDates.size}일"));
+  assert.ok(!app.includes("{exceptionTrips + recordedTrips}일"));
 });
 
 test("server routes send opaque Supabase secret keys only as API keys", async () => {
