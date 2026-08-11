@@ -124,6 +124,7 @@ export async function PATCH(request: Request) {
   const brandLogoUrl = typeof body?.brandLogoUrl === "string" ? body.brandLogoUrl.trim() : "";
   const isActive = typeof body?.isActive === "boolean" ? body.isActive : undefined;
   const mobileOrgAdminAccessEnabled = typeof body?.mobileOrgAdminAccessEnabled === "boolean" ? body.mobileOrgAdminAccessEnabled : undefined;
+  const mobileOrgAdminAccessReason = typeof body?.mobileOrgAdminAccessReason === "string" ? body.mobileOrgAdminAccessReason.trim() : "";
   const validAssetUrl = !brandLogoUrl || brandLogoUrl.startsWith("/") || /^https:\/\//i.test(brandLogoUrl);
   if (!orgId || (brandPrimaryColor && !/^#[0-9a-f]{6}$/i.test(brandPrimaryColor)) || (brandAccentColor && !/^#[0-9a-f]{6}$/i.test(brandAccentColor)) || !validAssetUrl) {
     return json({ ok: false, code: "INVALID_INPUT" }, 400);
@@ -147,6 +148,11 @@ export async function PATCH(request: Request) {
     if (mobileOrgAdminAccessEnabled !== undefined) updates.mobile_org_admin_access_enabled = mobileOrgAdminAccessEnabled;
   }
   const { data: beforeOrganization } = await client.from("organizations").select("*").eq("id", orgId).maybeSingle();
+  const mobileAccessChanged = !brandingOnly && mobileOrgAdminAccessEnabled !== undefined
+    && beforeOrganization?.mobile_org_admin_access_enabled !== mobileOrgAdminAccessEnabled;
+  if (mobileAccessChanged && mobileOrgAdminAccessEnabled && mobileOrgAdminAccessReason.length < 5) {
+    return json({ ok: false, code: "MOBILE_ACCESS_REASON_REQUIRED" }, 400);
+  }
   const { data: organization, error } = await client.from("organizations").update(updates).eq("id", orgId).select("*").maybeSingle();
   if (error || !organization) {
     const errorCode = error?.code === "42703" ? "BRANDING_SCHEMA_REQUIRED"
@@ -154,13 +160,15 @@ export async function PATCH(request: Request) {
         : "ORGANIZATION_UPDATE_FAILED";
     return json({ ok: false, code: errorCode }, errorCode === "ORGANIZATION_EXISTS" ? 409 : error ? 500 : 404);
   }
-  await client.from("attendance_audit_logs").insert({
-    employee_id: actor.id, action_type: brandingOnly ? "organization_branding_updated" : "organization_information_updated",
-    changed_field: brandingOnly ? "organization_branding" : "organization_information",
-    before_value: JSON.stringify(beforeOrganization || {}), after_value: JSON.stringify(organization),
-    reason: actor.role === "super_admin" ? "최고관리자가 기관 정보를 직접 변경했습니다." : "기관관리자가 기관 화면 설정을 변경했습니다.",
+  const { error: auditError } = await client.from("attendance_audit_logs").insert({
+    employee_id: actor.id, action_type: mobileAccessChanged ? "organization_mobile_admin_access_changed" : brandingOnly ? "organization_branding_updated" : "organization_information_updated",
+    changed_field: mobileAccessChanged ? "mobile_org_admin_access_enabled" : brandingOnly ? "organization_branding" : "organization_information",
+    before_value: mobileAccessChanged ? (beforeOrganization?.mobile_org_admin_access_enabled === false ? "차단" : "허용") : JSON.stringify(beforeOrganization || {}),
+    after_value: mobileAccessChanged ? (mobileOrgAdminAccessEnabled ? "허용" : "차단") : JSON.stringify(organization),
+    reason: mobileAccessChanged ? (mobileOrgAdminAccessEnabled ? mobileOrgAdminAccessReason : "최고관리자가 기관관리자의 휴대폰 접속을 차단했습니다.") : actor.role === "super_admin" ? "최고관리자가 기관 정보를 직접 변경했습니다." : "기관관리자가 기관 화면 설정을 변경했습니다.",
     changed_by: actor.id, changed_by_role: actor.role, org_id: orgId,
   });
+  if (auditError) return json({ ok: false, code: "AUDIT_LOG_SAVE_FAILED" }, 500);
   return json({ ok: true, organization });
 }
 

@@ -93,6 +93,10 @@ test("super administrators control organization-admin mobile access per organiza
   assert.match(organizations, /mobile_org_admin_access_enabled/);
   assert.match(app, /기관관리자 휴대폰 접속 허용/);
   assert.match(app, /직원의 휴대폰 출퇴근은 유지/);
+  assert.match(app, /휴대폰 접속을 다시 허용하는 사유를 5자 이상/);
+  assert.match(organizations, /MOBILE_ACCESS_REASON_REQUIRED/);
+  assert.match(organizations, /organization_mobile_admin_access_changed/);
+  assert.match(organizations, /before_value: mobileAccessChanged/);
 });
 
 test("administrator sidebar uses the configurable short mark without adding employee avatar settings", async () => {

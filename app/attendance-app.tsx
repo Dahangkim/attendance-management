@@ -420,6 +420,7 @@ const AUDIT_ACTION_LABEL: Record<string, string> = {
   super_admin_employee_number_updated: "최고관리자 로그인 사번 변경",
   organization_created: "기관 생성",
   organization_information_updated: "기관 정보 직접 변경",
+  organization_mobile_admin_access_changed: "기관관리자 휴대폰 접속 변경",
   organization_branding_updated: "기관 화면 설정 변경",
   organization_deactivated: "기관 사용 중지",
   organization_reactivated: "기관 다시 사용",
@@ -994,6 +995,16 @@ export default function AttendanceApp() {
   async function updateOrganization(form: HTMLFormElement) {
     if (!supabase || effectiveRole !== "super_admin" || !selectedOrgId) return;
     const values = new FormData(form);
+    const selected = organizations.find((item) => item.id === selectedOrgId);
+    const mobileOrgAdminAccessEnabled = values.get("mobile_org_admin_access_enabled") === "on";
+    let mobileOrgAdminAccessReason = "";
+    if (selected?.mobile_org_admin_access_enabled === false && mobileOrgAdminAccessEnabled) {
+      mobileOrgAdminAccessReason = window.prompt("기관관리자의 휴대폰 접속을 다시 허용하는 사유를 5자 이상 입력해 주세요.") || "";
+      if (mobileOrgAdminAccessReason.trim().length < 5) {
+        if (mobileOrgAdminAccessReason) setNotice({ tone: "warning", text: "휴대폰 접속 허용 사유를 5자 이상 입력해 주세요." });
+        return;
+      }
+    }
     setBusy(true);
     const { data: sessionData } = await supabase.auth.getSession();
     const response = await fetch("/api/admin-organizations", {
@@ -1004,13 +1015,14 @@ export default function AttendanceApp() {
         orgName: String(values.get("org_name") || ""),
         shortName: String(values.get("short_name") || ""),
         domain: String(values.get("domain") || ""),
-        mobileOrgAdminAccessEnabled: values.get("mobile_org_admin_access_enabled") === "on",
+        mobileOrgAdminAccessEnabled,
+        mobileOrgAdminAccessReason,
       }),
     }).catch(() => null);
     const result = response ? await response.json().catch(() => ({})) as { organization?: Organization; code?: string } : {};
     setBusy(false);
     if (!response?.ok || !result.organization) {
-      setNotice({ tone: "error", text: result.code === "ORGANIZATION_EXISTS" ? "같은 도메인을 쓰는 기관이 이미 있습니다." : result.code === "BRANDING_SCHEMA_REQUIRED" ? "스테이징 데이터베이스에 브랜딩 SQL이 아직 적용되지 않아 저장할 수 없습니다." : `기관 정보를 수정하지 못했습니다${result.code ? ` (${result.code})` : ""}.` });
+      setNotice({ tone: "error", text: result.code === "MOBILE_ACCESS_REASON_REQUIRED" ? "기관관리자 휴대폰 접속을 다시 허용하려면 사유를 5자 이상 입력해야 합니다." : result.code === "ORGANIZATION_EXISTS" ? "같은 도메인을 쓰는 기관이 이미 있습니다." : result.code === "BRANDING_SCHEMA_REQUIRED" ? "스테이징 데이터베이스에 브랜딩 SQL이 아직 적용되지 않아 저장할 수 없습니다." : `기관 정보를 수정하지 못했습니다${result.code ? ` (${result.code})` : ""}.` });
       return;
     }
     await loadOrganizations(result.organization.id);
