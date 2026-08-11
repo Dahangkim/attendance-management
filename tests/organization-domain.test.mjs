@@ -579,6 +579,17 @@ test("approved morning leave adjusts late status and required work time", async 
   }
 });
 
+test("clock correction requests reconnect to the matching attendance record", async () => {
+  const sql = await readFile(new URL("supabase/repair_clock_correction_request_link.sql", root), "utf8");
+  const install = await readFile(new URL("supabase/install_current.sql", root), "utf8");
+  for (const source of [sql, install]) {
+    assert.ok(source.includes("link_clock_correction_request_to_attendance"));
+    assert.ok(source.includes("record.employee_id = request.employee_id"));
+    assert.ok(source.includes("record.work_date = request.target_date"));
+    assert.ok(source.includes("request.status in ('pending', 'more_info')"));
+  }
+});
+
 test("super administrator self audit is not labeled as an organization", async () => {
   const account = await readFile(new URL("app/api/admin-super-admin-account/route.ts", root), "utf8");
   const branding = await readFile(new URL("app/api/admin-super-admin-branding/route.ts", root), "utf8");
