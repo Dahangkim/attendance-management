@@ -567,6 +567,18 @@ test("organization administrators can reopen reflected leave and the attendance 
   assert.doesNotMatch(app, /일반 시간외근무/);
 });
 
+test("approved morning leave adjusts late status and required work time", async () => {
+  const sql = await readFile(new URL("supabase/repair_leave_adjusted_attendance_status.sql", root), "utf8");
+  const install = await readFile(new URL("supabase/install_current.sql", root), "utf8");
+  for (const source of [sql, install]) {
+    assert.match(source, /v_expected_start/);
+    assert.match(source, /480 - v_approved_leave_minutes/);
+    assert.match(source, /request\.request_type in \('annual_leave','comp_time','special_leave','sick_leave','other_leave'\)/);
+    assert.match(source, /derive_attendance_status_on_insert/);
+    assert.match(source, /attendance_status = public\.derive_attendance_status\(record\)/);
+  }
+});
+
 test("super administrator self audit is not labeled as an organization", async () => {
   const account = await readFile(new URL("app/api/admin-super-admin-account/route.ts", root), "utf8");
   const branding = await readFile(new URL("app/api/admin-super-admin-branding/route.ts", root), "utf8");

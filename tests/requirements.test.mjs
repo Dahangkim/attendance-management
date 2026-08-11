@@ -736,6 +736,11 @@ test("monthly attendance shows every approved leave, overtime reasons, and excep
   assert.ok(app.includes('useState<"latest" | "oldest">("latest")'));
   assert.ok(app.includes("최근 날짜 먼저"));
   assert.ok(app.includes("과거 날짜 먼저"));
+  assert.ok(app.includes('log.action_type === "overtime_review"'));
+  assert.ok(app.includes("overtimeReasonForRecord(record, requests, auditLogs)"));
+  assert.ok(app.includes("승인된 휴가와 대체휴무"));
+  assert.ok(app.includes("approvedLeaveRequests.length"));
+  assert.ok(app.includes("같은 내용은 월별 근태기록에도 날짜별로 표시됩니다"));
 });
 
 test("server routes send opaque Supabase secret keys only as API keys", async () => {
