@@ -731,6 +731,11 @@ test("monthly attendance shows every approved leave, overtime reasons, and excep
   assert.ok(app.includes("const attendanceDates = new Set"));
   assert.ok(app.includes("{tripDates.size}일"));
   assert.ok(!app.includes("{exceptionTrips + recordedTrips}일"));
+  assert.ok(app.includes("left.target_date.localeCompare(right.target_date)"));
+  assert.ok(app.includes("left.start_date.localeCompare(right.start_date)"));
+  assert.ok(app.includes('useState<"latest" | "oldest">("latest")'));
+  assert.ok(app.includes("최근 날짜 먼저"));
+  assert.ok(app.includes("과거 날짜 먼저"));
 });
 
 test("server routes send opaque Supabase secret keys only as API keys", async () => {
