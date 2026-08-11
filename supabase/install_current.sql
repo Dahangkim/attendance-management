@@ -6379,3 +6379,73 @@ notify pgrst, 'reload schema';
 commit;
 
 select '시간외근무 신청 정규 근무시간 제외 계산 보완 완료' as result;
+
+
+-- ============================================================================
+-- supabase/repair_org_admin_leave_application.sql
+-- ============================================================================
+
+begin;
+
+create or replace function public.admin_apply_leave_to_attendance_record(
+  p_record_id uuid,p_request_type text,p_start_time time,p_end_time time,p_request_subtype text,p_comment text
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_record public.attendance_records;
+  v_role text := public.current_profile_role();
+  v_org_id uuid := public.current_profile_org_id();
+  v_request_id uuid;
+  v_minutes integer;
+  v_leave_type text := 'none';
+begin
+  if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
+  if v_role not in ('admin','org_admin','super_admin') then raise exception 'ADMIN_REQUIRED'; end if;
+  if p_request_type not in ('annual_leave','comp_time','special_leave','sick_leave','other_leave') then raise exception 'INVALID_LEAVE_TYPE'; end if;
+  if char_length(trim(coalesce(p_comment,''))) < 5 then raise exception 'COMMENT_REQUIRED'; end if;
+  if p_start_time is null or p_end_time is null or p_end_time <= p_start_time then raise exception 'INVALID_TIME_RANGE'; end if;
+  if p_request_type in ('special_leave','other_leave') and char_length(trim(coalesce(p_request_subtype,''))) < 2 then raise exception 'LEAVE_NAME_REQUIRED'; end if;
+  select * into v_record from public.attendance_records where id = p_record_id and deleted_at is null for update;
+  if not found then raise exception 'RECORD_NOT_FOUND'; end if;
+  if v_role <> 'super_admin' and v_record.org_id is distinct from v_org_id then raise exception 'ORGANIZATION_ACCESS_DENIED'; end if;
+  if exists (
+    select 1 from public.monthly_closings closing
+    where closing.org_id = v_record.org_id
+      and closing.year = extract(year from v_record.work_date)
+      and closing.month = extract(month from v_record.work_date)
+      and closing.status = 'closed'
+  ) and v_role <> 'super_admin' then raise exception 'MONTH_CLOSED'; end if;
+  v_minutes := public.calculate_attendance_request_minutes(p_request_type,v_record.work_date,v_record.work_date,p_start_time,p_end_time);
+  if v_minutes <= 0 then raise exception 'REQUEST_TIME_ZERO'; end if;
+  insert into public.correction_requests (
+    attendance_record_id,employee_id,target_date,end_date,start_time,end_time,calculated_minutes,approved_minutes,
+    request_type,request_subtype,before_value,requested_value,reason,status,reviewer_id,reviewer_comment,reviewed_at,org_id
+  ) values (
+    v_record.id,v_record.employee_id,v_record.work_date,v_record.work_date,p_start_time,p_end_time,v_minutes,v_minutes,
+    p_request_type,case when p_request_type in ('special_leave','other_leave') then trim(coalesce(p_request_subtype,'')) else '' end,
+    v_record.attendance_status,v_minutes::text,trim(p_comment),'approved',auth.uid(),trim(p_comment),now(),v_record.org_id
+  ) returning id into v_request_id;
+  if p_request_type = 'annual_leave' then
+    v_leave_type := case v_minutes when 480 then 'annual_leave' when 240 then 'half_day' when 120 then 'quarter_day' when 60 then 'hourly_leave' else 'none' end;
+  elsif p_request_type = 'sick_leave' then v_leave_type := 'sick_leave'; end if;
+  update public.attendance_records
+  set attendance_status = case when clock_out_at is null then 'working' else 'normal' end,
+      leave_type = v_leave_type,changed = true,updated_at = now()
+  where id = v_record.id;
+  insert into public.attendance_audit_logs (
+    attendance_record_id,employee_id,action_type,changed_field,before_value,after_value,reason,
+    changed_by,changed_by_role,correction_request_id,org_id
+  ) values (
+    v_record.id,v_record.employee_id,'admin_leave_applied','leave_request',v_record.attendance_status,
+    jsonb_build_object('request_type',p_request_type,'start_time',p_start_time,'end_time',p_end_time,'minutes',v_minutes,'subtype',trim(coalesce(p_request_subtype,'')))::text,
+    trim(p_comment),auth.uid(),v_role,v_request_id,v_record.org_id
+  );
+  return v_request_id;
+end $$;
+
+revoke all on function public.admin_apply_leave_to_attendance_record(uuid,text,time,time,text,text) from public,anon;
+grant execute on function public.admin_apply_leave_to_attendance_record(uuid,text,time,time,text,text) to authenticated;
+notify pgrst, 'reload schema';
+commit;
+
+select '기관관리자 휴가와 대체휴무 반영 권한 보완 완료' as result;

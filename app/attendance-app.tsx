@@ -1685,7 +1685,17 @@ export default function AttendanceApp() {
         p_request_subtype: requestSubtype,
         p_comment: comment,
       });
-      if (error) { setNotice({ tone: "error", text: `휴가 또는 대체휴무를 반영하지 못했습니다${error.code ? ` (오류코드 ${error.code})` : ""}.${error.code === "42703" && error.message ? ` 서버 세부내용: ${error.message}` : ""} 데이터베이스 보완 SQL 적용 여부를 확인해 주세요.` }); return; }
+      if (error) {
+        const message = String(error.message || "");
+        const detail = message.includes("ADMIN_REQUIRED") ? "현재 계정의 기관관리자 권한을 데이터베이스에서 확인해 주세요."
+          : message.includes("ORGANIZATION_ACCESS_DENIED") ? "다른 기관 직원의 기록에는 반영할 수 없습니다."
+            : message.includes("MONTH_CLOSED") ? "마감된 달에는 반영할 수 없습니다. 월 마감 상태를 확인해 주세요."
+              : message.includes("ANNUAL_LEAVE_ENTITLEMENT_REQUIRED") ? "해당 기간의 연차 부여내역이 없습니다. 먼저 연차를 등록해 주세요."
+                : message.includes("ANNUAL_LEAVE_BALANCE_INSUFFICIENT") ? "남은 연차가 부족합니다."
+                  : message.includes("COMP_TIME_BALANCE_INSUFFICIENT") ? "사용 가능한 대체휴무가 부족합니다."
+                    : "데이터베이스 보완 SQL 적용 여부를 확인해 주세요.";
+        setNotice({ tone: "error", text: `휴가 또는 대체휴무를 반영하지 못했습니다${error.code ? ` (오류코드 ${error.code})` : ""}. ${detail}` }); return;
+      }
       if (currentProfile) await loadRemoteData(currentProfile);
     }
     setLeaveApplyingRecord(null);

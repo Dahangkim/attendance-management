@@ -204,6 +204,17 @@ test("organization administrators manage leave balances only inside their organi
   assert.match(app, /적용 기간과 부여 일수를 한 번에 입력/);
 });
 
+test("organization administrators apply leave only to attendance in their organization", async () => {
+  const repair = await readFile(new URL("supabase/repair_org_admin_leave_application.sql", root), "utf8");
+  for (const text of [
+    "v_role not in ('admin','org_admin','super_admin')",
+    "v_record.org_id is distinct from v_org_id",
+    "closing.org_id = v_record.org_id",
+    "v_record.org_id",
+    "admin_leave_applied",
+  ]) assert.ok(repair.includes(text));
+});
+
 test("organization settings keep save actions with their sections and hide raw logo urls", async () => {
   const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
   assert.match(app, /1\. 기본 근무시간/);
