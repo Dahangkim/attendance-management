@@ -687,8 +687,11 @@ export default function AttendanceApp() {
   }, [profile?.id, profile?.role]);
 
   useEffect(() => {
-    if (profile && supabase && (isAdminRole(profile.role) || profile.can_view_reports)) void loadHolidays(holidayYear);
-  }, [profile, holidayYear]);
+    if (!profile || !supabase) return;
+    const attendanceYear = Number(selectedMonth.slice(0, 4));
+    void loadHolidays(attendanceYear);
+    if ((isAdminRole(profile.role) || profile.can_view_reports) && holidayYear !== attendanceYear) void loadHolidays(holidayYear);
+  }, [profile, selectedMonth, holidayYear, selectedOrgId]);
 
   async function loadProfile(userId: string) {
     if (!supabase) return;
@@ -2171,8 +2174,11 @@ export default function AttendanceApp() {
 
   async function loadHolidays(year: number) {
     if (!supabase) return;
-    const { data, error } = await supabase.from("organization_holidays").select("org_id,holiday_date,holiday_name,is_paid_holiday").gte("holiday_date", `${year}-01-01`).lte("holiday_date", `${year}-12-31`).order("holiday_date");
-    if (!error) setHolidays((data || []) as Holiday[]);
+    const targetOrgId = currentProfile?.role === "super_admin" ? selectedOrgId : currentProfile?.org_id;
+    let query = supabase.from("organization_holidays").select("org_id,holiday_date,holiday_name,is_paid_holiday").gte("holiday_date", `${year}-01-01`).lte("holiday_date", `${year}-12-31`).order("holiday_date");
+    if (targetOrgId) query = query.eq("org_id", targetOrgId);
+    const { data, error } = await query;
+    if (!error) setHolidays((previous) => [...previous.filter((holiday) => !holiday.holiday_date.startsWith(`${year}-`)), ...((data || []) as Holiday[])]);
   }
 
   async function toggleReportViewer(person: Profile) {
@@ -3299,6 +3305,7 @@ function SettingsView({
   busy: boolean;
 }) {
   const employees = profiles.filter((person) => person.role === "employee");
+  const visibleHolidays = holidays.filter((holiday) => holiday.holiday_date.startsWith(`${holidayYear}-`));
   return <section>
     <div className="page-heading">
       <div><span className="kicker">기관 운영 설정</span><h1>근무와 계정 설정</h1><p>자주 바꾸는 근무 기준부터 직원 계정, 화면 꾸미기, 보호 설정 순서로 정리했습니다.</p></div>
@@ -3325,11 +3332,11 @@ function SettingsView({
           <button type="button" className="secondary-button" onClick={onAddHoliday} disabled={busy}><CalendarDays size={16} /> 기관 휴일 직접 추가</button>
         </div>
         <div className="holiday-list">
-          {holidays.map((holiday) => <div key={holiday.holiday_date}>
+          {visibleHolidays.map((holiday) => <div key={holiday.holiday_date}>
             <time>{holiday.holiday_date}</time><strong>{holiday.holiday_name}</strong>
             <span><button type="button" onClick={() => onEditHoliday(holiday)} disabled={busy}><PencilLine size={15} /> 수정</button><button type="button" className="danger" onClick={() => onRemoveHoliday(holiday)} disabled={busy}><Trash2 size={15} /> 취소</button></span>
           </div>)}
-          {holidays.length === 0 && <p>이 연도에 저장된 휴일이 없습니다. Google 공휴일을 불러오거나 기관 휴일을 직접 추가해 주세요.</p>}
+          {visibleHolidays.length === 0 && <p>이 연도에 저장된 휴일이 없습니다. Google 공휴일을 불러오거나 기관 휴일을 직접 추가해 주세요.</p>}
         </div>
         <div className="setting-info"><AlertCircle /><p>다시 불러오기는 기관이 직접 추가한 다른 날짜를 지우지 않습니다. 목록의 모든 휴일은 수정하거나 취소할 수 있습니다.</p></div>
       </article>

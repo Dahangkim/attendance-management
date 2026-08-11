@@ -744,6 +744,9 @@ test("monthly attendance shows every approved leave, overtime reasons, and excep
   assert.ok(app.includes("attendanceLeaveLabel(record, requests, holidays)"));
   assert.ok(app.includes("const hasActualWork = Boolean(record.clock_in_at || record.clock_out_at)"));
   assert.ok(app.includes("if (!isHoliday) return true"));
+  assert.ok(app.includes("const attendanceYear = Number(selectedMonth.slice(0, 4))"));
+  assert.ok(app.includes("void loadHolidays(attendanceYear)"));
+  assert.ok(app.includes("const visibleHolidays = holidays.filter"));
   assert.ok(app.includes('log.action_type === "overtime_review"'));
   assert.ok(app.includes("overtimeReasonForRecord(record, requests, auditLogs)"));
   assert.ok(app.includes("승인된 휴가와 대체휴무"));
