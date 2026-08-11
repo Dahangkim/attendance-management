@@ -717,6 +717,16 @@ test("result attendance sheets omit raw location and leave request reasons", asy
   assert.ok(app.includes('record.clock_in_accuracy == null ? "" : `${record.clock_in_accuracy}m`'));
 });
 
+test("monthly attendance shows every approved leave, overtime reasons, and exception-only dates", async () => {
+  const app = await read("app/attendance-app.tsx");
+  assert.ok(app.includes("approvedLeavesForRecord"));
+  assert.ok(app.includes('labels.join(", ")'));
+  assert.ok(app.includes("overtimeReasonForRecord"));
+  assert.ok(app.includes("사유: {overtimeReason}"));
+  assert.ok(app.includes("includeExceptionDays(records.filter"));
+  assert.ok(app.includes("예외 일정 자동 표시"));
+});
+
 test("server routes send opaque Supabase secret keys only as API keys", async () => {
   const helper = await read("app/api/_lib/server-supabase.ts");
   const clockRoute = await read("app/api/clock-attendance/route.ts");
