@@ -711,6 +711,7 @@ test("result attendance sheets omit raw location and leave request reasons", asy
   const app = await read("app/attendance-app.tsx");
   assert.ok(app.includes('const annualDetail = annualMinutes > 0 ? `${leaveUnitLabel(annualMinutes)} 사용` : ""'));
   assert.ok(app.includes('const specialLeaveDetail = specialLeaveMinutes > 0 ? `${specialLeave?.request_subtype || "특별휴가"} ${leaveDayLabel(specialLeaveMinutes)} 사용` : ""'));
+  assert.ok(app.includes('const otherLeaveDetail = otherLeaveMinutes > 0 ? `${otherLeave?.request_subtype || "기타 휴가"} ${leaveDayLabel(otherLeaveMinutes)} 사용` : ""'));
   assert.ok(app.includes('overtimeDetail, emergencyDetail, compDetail, annualDetail, specialLeaveDetail, otherLeaveDetail, sickDetail, tripDetail].filter(Boolean)'));
   assert.ok(!app.includes('annual?.reason ? `, 사유: ${annual.reason}`'));
   assert.ok(!app.includes('tripDetail, record?.note || ""'));
