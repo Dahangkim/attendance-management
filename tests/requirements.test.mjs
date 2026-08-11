@@ -740,6 +740,8 @@ test("monthly attendance shows every approved leave, overtime reasons, and excep
   assert.ok(app.includes("setShowApprovedLeaves"));
   assert.ok(app.includes("if (value === selectedMonth) return"));
   assert.ok(app.includes("사용 시작일이 빠른 순으로 정렬하며, 같은 날은 직원명 순"));
+  assert.ok(app.includes("holidays.some((holiday) => holiday.holiday_date === record.work_date)"));
+  assert.ok(app.includes("attendanceLeaveLabel(record, requests, holidays)"));
   assert.ok(app.includes('log.action_type === "overtime_review"'));
   assert.ok(app.includes("overtimeReasonForRecord(record, requests, auditLogs)"));
   assert.ok(app.includes("승인된 휴가와 대체휴무"));
