@@ -82,6 +82,19 @@ test("organization administrators can log in from mobile to request protected se
   assert.match(app, /위치 변경 승인 요청/);
 });
 
+test("super administrators control organization-admin mobile access per organization", async () => {
+  const sql = await readFile(new URL("supabase/add_mobile_org_admin_access_control.sql", root), "utf8");
+  const login = await readFile(new URL("app/api/employee-login/route.ts", root), "utf8");
+  const organizations = await readFile(new URL("app/api/admin-organizations/route.ts", root), "utf8");
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  assert.match(sql, /mobile_org_admin_access_enabled boolean not null default true/);
+  assert.match(login, /MOBILE_ORG_ADMIN_DISABLED/);
+  assert.match(login, /\["org_admin", "admin"\]/);
+  assert.match(organizations, /mobile_org_admin_access_enabled/);
+  assert.match(app, /기관관리자 휴대폰 접속 허용/);
+  assert.match(app, /직원의 휴대폰 출퇴근은 유지/);
+});
+
 test("administrator sidebar uses the configurable short mark without adding employee avatar settings", async () => {
   const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
   const styles = await readFile(new URL("app/globals.css", root), "utf8");

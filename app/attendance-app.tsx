@@ -1004,6 +1004,7 @@ export default function AttendanceApp() {
         orgName: String(values.get("org_name") || ""),
         shortName: String(values.get("short_name") || ""),
         domain: String(values.get("domain") || ""),
+        mobileOrgAdminAccessEnabled: values.get("mobile_org_admin_access_enabled") === "on",
       }),
     }).catch(() => null);
     const result = response ? await response.json().catch(() => ({})) as { organization?: Organization; code?: string } : {};
@@ -1303,7 +1304,9 @@ export default function AttendanceApp() {
     }).catch(() => null);
     const result = response ? await response.json().catch(() => ({})) as { session?: { access_token: string; refresh_token: string }; organization?: TenantOrganization; code?: string } : {};
     if (!response?.ok || !result.session) {
-      setLoginError(result.code === "PASSWORD_MIGRATION_FAILED"
+      setLoginError(result.code === "MOBILE_ORG_ADMIN_DISABLED"
+        ? "이 기관은 기관관리자의 휴대폰 접속을 허용하지 않습니다. PC에서 접속하거나 최고관리자에게 문의해 주세요."
+        : result.code === "PASSWORD_MIGRATION_FAILED"
         ? "기존 비밀번호 전환을 완료하지 못했습니다. 관리자에게 문의해 주세요."
         : "사번, 이메일 또는 비밀번호를 확인해 주세요.");
       setBusy(false);
@@ -2841,7 +2844,7 @@ function OrganizationManagement({ organizations, organizationAdmins, organizatio
         </article>}
         {selectedOrganization && <form key={selectedOrganization.id} className="surface-card" onSubmit={(event) => { event.preventDefault(); onUpdateOrganization(event.currentTarget); }}>
           <div className="card-heading"><div><span className="kicker">최고관리자 관리 항목</span><h2>{selectedOrganization.short_name} 기본정보</h2></div><Settings /></div>
-          <div className="form-grid"><label className="full">기관 공식명<input name="org_name" defaultValue={selectedOrganization.org_name} minLength={2} maxLength={100} required /></label><label>짧은 이름<input name="short_name" defaultValue={selectedOrganization.short_name} maxLength={50} required /></label><label>기관 코드<input value={selectedOrganization.org_code} disabled /><small>기관과 기록을 연결하는 내부 값이므로 변경하지 않습니다.</small></label><label className="full">기관별 접속 도메인, 선택<input name="domain" defaultValue={selectedOrganization.domain || ""} placeholder="전용 주소가 필요할 때만 입력" /><small>직원은 도메인이나 기관명을 입력하지 않고 사번만으로 로그인할 수 있습니다.</small></label></div>
+          <div className="form-grid"><label className="full">기관 공식명<input name="org_name" defaultValue={selectedOrganization.org_name} minLength={2} maxLength={100} required /></label><label>짧은 이름<input name="short_name" defaultValue={selectedOrganization.short_name} maxLength={50} required /></label><label>기관 코드<input value={selectedOrganization.org_code} disabled /><small>기관과 기록을 연결하는 내부 값이므로 변경하지 않습니다.</small></label><label className="full">기관별 접속 도메인, 선택<input name="domain" defaultValue={selectedOrganization.domain || ""} placeholder="전용 주소가 필요할 때만 입력" /><small>직원은 도메인이나 기관명을 입력하지 않고 사번만으로 로그인할 수 있습니다.</small></label><label className="choice-card full"><input name="mobile_org_admin_access_enabled" type="checkbox" defaultChecked={selectedOrganization.mobile_org_admin_access_enabled !== false} /><span><strong>기관관리자 휴대폰 접속 허용</strong><small>끄면 직원의 휴대폰 출퇴근은 유지되고 기관관리자만 휴대폰 로그인이 차단됩니다.</small></span></label></div>
           <div className="setting-info"><ShieldCheck /><p>화면 제목, 로고와 색상은 각 기관관리자가 자기 기관 설정에서 변경합니다.</p></div>
           <div className="organization-edit-actions"><button className="primary-button compact" disabled={busy}><Check /> 기관 정보 저장</button>{selectedOrganization.is_active ? <button type="button" className="reject-button" onClick={onDeactivateOrganization} disabled={busy}><Trash2 size={16} /> 기관 사용 중지</button> : <button type="button" className="approve-button" onClick={onReactivateOrganization} disabled={busy}><RefreshCw size={16} /> 기관 다시 사용</button>}</div>
           <div className="setting-info"><ShieldCheck /><p>기관 사용 중지는 직원 로그인을 막지만 기존 근태기록과 변경 이력은 삭제하지 않습니다. 중지된 기관을 선택하면 기관 다시 사용 버튼이 표시됩니다.</p></div>

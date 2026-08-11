@@ -4,7 +4,7 @@ import { toSupabasePassword } from "../../../lib/auth-password";
 
 export const dynamic = "force-dynamic";
 
-const ORGANIZATION_FIELDS = "id,org_code,org_name,short_name,domain,brand_title,brand_short_title,brand_description,brand_subtitle,brand_mark,brand_logo_url,brand_primary_color,brand_accent_color,brand_og_image_url";
+const ORGANIZATION_FIELDS = "id,org_code,org_name,short_name,domain,mobile_org_admin_access_enabled,brand_title,brand_short_title,brand_description,brand_subtitle,brand_mark,brand_logo_url,brand_primary_color,brand_accent_color,brand_og_image_url";
 const responseHeaders = { "Cache-Control": "no-store" };
 const json = (body: Record<string, unknown>, status = 200) => Response.json(body, { status, headers: responseHeaders });
 const rejectLogin = () => json({ ok: false, code: "INVALID_CREDENTIALS" }, 401);
@@ -64,6 +64,10 @@ export async function POST(request: Request) {
   const authClient = createServerSupabaseClient(supabaseUrl, publishableKey);
   const { data: authData, error: authError } = await authClient.auth.signInWithPassword({ email: authEmail, password: toSupabasePassword(password) });
   if (authError || !authData.session || authData.user.id !== profile.id) return rejectLogin();
+  const mobileRequest = /Android|iPhone|iPad|iPod|Mobile/i.test(request.headers.get("user-agent") || "");
+  if (["org_admin", "admin"].includes(profile.role) && mobileRequest && organization?.mobile_org_admin_access_enabled === false) {
+    return json({ ok: false, code: "MOBILE_ORG_ADMIN_DISABLED" }, 403);
+  }
   if (["org_admin", "admin", "super_admin"].includes(profile.role)) {
     try {
       const { error: loginLogError } = await adminClient.from("admin_login_logs").insert({

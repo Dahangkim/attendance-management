@@ -123,6 +123,7 @@ export async function PATCH(request: Request) {
   const brandMark = typeof body?.brandMark === "string" ? body.brandMark.trim().slice(0, 2) : "";
   const brandLogoUrl = typeof body?.brandLogoUrl === "string" ? body.brandLogoUrl.trim() : "";
   const isActive = typeof body?.isActive === "boolean" ? body.isActive : undefined;
+  const mobileOrgAdminAccessEnabled = typeof body?.mobileOrgAdminAccessEnabled === "boolean" ? body.mobileOrgAdminAccessEnabled : undefined;
   const validAssetUrl = !brandLogoUrl || brandLogoUrl.startsWith("/") || /^https:\/\//i.test(brandLogoUrl);
   if (!orgId || (brandPrimaryColor && !/^#[0-9a-f]{6}$/i.test(brandPrimaryColor)) || (brandAccentColor && !/^#[0-9a-f]{6}$/i.test(brandAccentColor)) || !validAssetUrl) {
     return json({ ok: false, code: "INVALID_INPUT" }, 400);
@@ -143,6 +144,7 @@ export async function PATCH(request: Request) {
     updates.short_name = shortName;
     updates.domain = domain || null;
     if (isActive !== undefined) updates.is_active = isActive;
+    if (mobileOrgAdminAccessEnabled !== undefined) updates.mobile_org_admin_access_enabled = mobileOrgAdminAccessEnabled;
   }
   const { data: beforeOrganization } = await client.from("organizations").select("*").eq("id", orgId).maybeSingle();
   const { data: organization, error } = await client.from("organizations").update(updates).eq("id", orgId).select("*").maybeSingle();

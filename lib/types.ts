@@ -10,6 +10,7 @@ export interface Organization {
   expected_staff_count: number | null;
   domain: string | null;
   is_active: boolean;
+  mobile_org_admin_access_enabled?: boolean;
   brand_title?: string | null;
   brand_short_title?: string | null;
   brand_description?: string | null;
