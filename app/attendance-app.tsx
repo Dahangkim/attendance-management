@@ -2673,6 +2673,7 @@ export default function AttendanceApp() {
   }
 
   function changeSelectedMonth(value: string) {
+    if (value === selectedMonth) return;
     if (isSupabaseConfigured) setDataReady(false);
     setMonthClosing(null);
     setSelectedMonth(value);
