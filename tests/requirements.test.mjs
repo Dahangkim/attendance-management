@@ -724,6 +724,8 @@ test("monthly attendance shows every approved leave, overtime reasons, and excep
   assert.ok(app.includes("overtimeReasonForRecord"));
   assert.ok(app.includes("사유: {overtimeReason}"));
   assert.ok(app.includes("includeExceptionDays(records.filter"));
+  assert.ok(app.includes('["annual_leave", "comp_time", "sick_leave", "special_leave", "other_leave", "business_trip"]'));
+  assert.ok(app.includes('id: `request-${request.id}-${workDate}`'));
   assert.ok(app.includes("예외 일정 자동 표시"));
 });
 
