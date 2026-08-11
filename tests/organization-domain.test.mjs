@@ -539,7 +539,7 @@ test("emergency support stays separate from attendance and overtime review first
   assert.match(app, /approvedEmergencyMinutesForRecord/);
   assert.match(app, /effectiveClockOutAt/);
   assert.match(app, /requestType === "emergency_support" \? "emergency"/);
-  assert.match(app, /일반 시간외근무/);
+  assert.match(app, /시간외근무/);
   assert.match(app, /긴급지원 인정시간/);
   assert.match(app, /onOvertimeReopen/);
   assert.match(app, /setStatusView\("pending"\)/);
@@ -551,6 +551,20 @@ test("organization administrators can add weekend attendance in their own organi
   assert.match(sql, /v_employee_org_id is distinct from v_actor_org_id/);
   assert.match(sql, /org_id = v_employee_org_id/);
   assert.match(sql, /admin_create_attendance_records/);
+});
+
+test("organization administrators can reopen reflected leave and the attendance leave marker is synchronized", async () => {
+  const sql = await readFile(new URL("supabase/repair_org_admin_leave_reversal.sql", root), "utf8");
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  assert.match(sql, /'admin','org_admin','super_admin'/);
+  assert.match(sql, /v_request\.org_id is distinct from v_org_id/);
+  assert.match(sql, /closing\.org_id = v_request\.org_id/);
+  assert.match(sql, /sync_attendance_leave_type_from_request/);
+  assert.match(sql, /request\.status = 'approved'/);
+  assert.match(sql, /set leave_type = v_leave_type/);
+  assert.match(app, /leaveDayLabel/);
+  assert.match(app, /overtimeBreakdownLabel/);
+  assert.doesNotMatch(app, /일반 시간외근무/);
 });
 
 test("super administrator self audit is not labeled as an organization", async () => {
