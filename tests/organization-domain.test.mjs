@@ -756,6 +756,22 @@ test("weekly overtime over 12 hours requires a server-side acknowledged reason b
   assert.match(install, /WEEKLY_OVERTIME_OVERRIDE_REQUIRED/);
 });
 
+test("the final overtime request repair removes a later restored hard weekly limit", async () => {
+  const repair = await readFile(new URL("supabase/repair_overtime_review_final_consistency.sql", root), "utf8");
+  const install = await readFile(new URL("supabase/install_current.sql", root), "utf8");
+  for (const sql of [repair, install]) {
+    assert.match(sql, /review_correction_request/);
+    assert.match(sql, /OVERTIME_REVIEW_FINAL_CONSISTENCY_FAILED/);
+    assert.match(sql, /WEEKLY_OVERTIME_OVERRIDE_SQL_REQUIRED/);
+    assert.match(sql, /enforce_weekly_override_on_overtime_approval_trigger/);
+  }
+  assert.ok(
+    install.lastIndexOf("repair_overtime_review_final_consistency.sql")
+      > install.lastIndexOf("repair_org_admin_leave_reversal.sql"),
+    "the final consistency repair must run after later function replacements",
+  );
+});
+
 test("only public developer support is exposed and institution support stays offline", async () => {
   const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
   const owner = await readFile(new URL("lib/application-owner.ts", root), "utf8");
