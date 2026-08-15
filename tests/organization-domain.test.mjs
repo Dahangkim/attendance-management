@@ -822,6 +822,19 @@ test("employees can cancel pending overtime requests and education leave replace
   assert.doesNotMatch(app, />기타 휴가</);
 });
 
+test("overtime requests store advance overtime and comp-time limits and finalize at clock-out", async () => {
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  const sql = await readFile(new URL("supabase/repair_overtime_preapproval_limits.sql", root), "utf8");
+  for (const source of [sql]) {
+    assert.match(source, /overtime_approval_limit_minutes/);
+    assert.match(source, /comp_time_approval_limit_minutes/);
+    assert.match(source, /finalize_preapproved_overtime_after_clock_out/);
+    assert.match(source, /least\(coalesce\(v_record\.recorded_overtime_minutes,0\),v_request\.overtime_approval_limit_minutes\)/);
+  }
+  assert.match(app, /review_overtime_request_in_advance/);
+  assert.match(app, /실제 인정시간은 퇴근할 때 확정됩니다/);
+});
+
 test("super administrator login history is stored and displayed without an institution", async () => {
   const login = await readFile(new URL("app/api/employee-login/route.ts", root), "utf8");
   const history = await readFile(new URL("app/api/admin-login-history/route.ts", root), "utf8");

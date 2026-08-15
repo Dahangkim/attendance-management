@@ -1766,9 +1766,11 @@ export default function AttendanceApp() {
 
   const weeklyApprovedTotalAfter = (employeeId: string, workDate: string, proposedMinutes: number, excludeRecordId = "", excludeRequestId = "") => {
     const week = weekRange(workDate);
-    const regularMinutes = records.filter((record) => record.id !== excludeRecordId && record.employee_id === employeeId && record.work_date >= week.start && record.work_date <= week.end && record.overtime_status === "approved").reduce((sum, record) => sum + (record.approved_overtime_minutes || 0), 0);
+    const linkedPreapprovalRecordIds = new Set(requests.filter((request) => request.request_type === "overtime" && request.status === "approved" && request.attendance_record_id).map((request) => request.attendance_record_id));
+    const regularMinutes = records.filter((record) => record.id !== excludeRecordId && !linkedPreapprovalRecordIds.has(record.id) && record.employee_id === employeeId && record.work_date >= week.start && record.work_date <= week.end && record.overtime_status === "approved").reduce((sum, record) => sum + (record.approved_overtime_minutes || 0), 0);
+    const preapprovedMinutes = requests.filter((request) => request.id !== excludeRequestId && request.employee_id === employeeId && request.request_type === "overtime" && request.status === "approved" && request.target_date >= week.start && request.target_date <= week.end).reduce((sum, request) => sum + (request.overtime_approval_limit_minutes || request.approved_minutes || 0), 0);
     const emergencyMinutes = requests.filter((request) => request.id !== excludeRequestId && request.employee_id === employeeId && request.request_type === "emergency_support" && request.status === "approved" && request.target_date >= week.start && request.target_date <= week.end).reduce((sum, request) => sum + (request.approved_minutes || request.calculated_minutes || 0), 0);
-    return { ...week, total: regularMinutes + emergencyMinutes + proposedMinutes };
+    return { ...week, total: regularMinutes + preapprovedMinutes + emergencyMinutes + proposedMinutes };
   };
 
   async function acknowledgeWeeklyOvertimeIfRequired(employeeId: string, workDate: string, proposedMinutes: number, excludeRecordId = "", excludeRequestId = "") {
@@ -1892,25 +1894,47 @@ export default function AttendanceApp() {
 
   async function reviewRequest(request: CorrectionRequest, decision: "approved" | "rejected" | "more_info") {
     let weeklyNotice = "";
-    if (decision === "approved" && ["emergency_support", "overtime"].includes(request.request_type)) {
-      const linkedRecord = records.find((record) => record.id === request.attendance_record_id) || records.find((record) => record.employee_id === request.employee_id && record.work_date === request.target_date);
-      const proposedMinutes = request.request_type === "overtime" ? Math.min(request.calculated_minutes || Number(request.requested_value) || 0, linkedRecord?.recorded_overtime_minutes || 0) : request.calculated_minutes || Number(request.requested_value) || 0;
-      const acknowledgement = await acknowledgeWeeklyOvertimeIfRequired(request.employee_id, request.target_date, proposedMinutes, request.request_type === "overtime" ? linkedRecord?.id || "" : "", request.request_type === "emergency_support" ? request.id : "");
+    let overtimeLimitMinutes = 0;
+    let compTimeLimitMinutes = 0;
+    if (decision === "approved" && request.request_type === "overtime") {
+      const requestLimit = Math.min(240, request.calculated_minutes || Number(request.requested_value) || 0);
+      const overtimeInput = window.prompt(`사전 승인할 시간외근무 최대시간을 분 단위로 입력해 주세요. 신청 범위 안에서 최대 ${formatMinutes(requestLimit)}까지 승인할 수 있습니다.`, String(requestLimit));
+      if (overtimeInput === null) return;
+      overtimeLimitMinutes = Number(overtimeInput);
+      if (!Number.isInteger(overtimeLimitMinutes) || overtimeLimitMinutes < 0 || overtimeLimitMinutes > requestLimit || (overtimeLimitMinutes > 0 && (overtimeLimitMinutes < 60 || overtimeLimitMinutes % 30 !== 0))) {
+        setNotice({ tone: "warning", text: `시간외근무 승인 한도는 신청 범위 안에서 0분 또는 최초 1시간부터 30분 단위로 입력해 주세요. 최대 ${formatMinutes(requestLimit)}입니다.` }); return;
+      }
+      const compInput = window.prompt(`사전 승인할 대체휴무 최대시간을 분 단위로 입력해 주세요. 지급하지 않으면 0을 입력하세요. 최대 ${formatMinutes(requestLimit)}까지 정할 수 있으며 실제 퇴근시간에 따라 확정됩니다.`, "0");
+      if (compInput === null) return;
+      compTimeLimitMinutes = Number(compInput);
+      if (!Number.isInteger(compTimeLimitMinutes) || compTimeLimitMinutes < 0 || compTimeLimitMinutes > requestLimit || (compTimeLimitMinutes > 0 && (compTimeLimitMinutes < 60 || compTimeLimitMinutes % 30 !== 0))) {
+        setNotice({ tone: "warning", text: `대체휴무 승인 한도는 0분 또는 최초 1시간부터 30분 단위로 입력해 주세요. 최대 ${formatMinutes(requestLimit)}입니다.` }); return;
+      }
+      const acknowledgement = await acknowledgeWeeklyOvertimeIfRequired(request.employee_id, request.target_date, overtimeLimitMinutes, "", request.id);
+      if (!acknowledgement.ok) return;
+      weeklyNotice = acknowledgement.notice;
+    }
+    if (decision === "approved" && request.request_type === "emergency_support") {
+      const proposedMinutes = request.calculated_minutes || Number(request.requested_value) || 0;
+      const acknowledgement = await acknowledgeWeeklyOvertimeIfRequired(request.employee_id, request.target_date, proposedMinutes, "", request.id);
       if (!acknowledgement.ok) return;
       weeklyNotice = acknowledgement.notice;
     }
     const comment = window.prompt(decision === "approved" ? "승인 의견을 입력해 주세요. 선택 입력입니다." : "처리 의견을 입력해 주세요.") ?? "";
     if (decision !== "approved" && !comment.trim()) return;
     if (supabase) {
-      const reviewFunction = request.request_type === "emergency_support" ? "review_emergency_support_work" : "review_correction_request";
-      const { error } = await supabase.rpc(reviewFunction, { p_request_id: request.id, p_decision: decision, p_comment: comment });
+      const reviewFunction = request.request_type === "emergency_support" ? "review_emergency_support_work" : request.request_type === "overtime" ? "review_overtime_request_in_advance" : "review_correction_request";
+      const reviewPayload = request.request_type === "overtime"
+        ? { p_request_id: request.id, p_decision: decision, p_overtime_limit_minutes: overtimeLimitMinutes, p_comp_time_limit_minutes: compTimeLimitMinutes, p_comment: comment }
+        : { p_request_id: request.id, p_decision: decision, p_comment: comment };
+      const { error } = await supabase.rpc(reviewFunction, reviewPayload);
       if (error) { const message = String(error.message || ""); setNotice({ tone: "error", text: message.includes("WEEKLY_OVERTIME_OVERRIDE_REQUIRED") ? "주 12시간 초과 승인 확인이 없거나 만료됐습니다. 다시 승인하고 초과 사유를 입력해 주세요." : message.includes("EMERGENCY_SUPPORT_TIME_OVERLAP") ? "다른 긴급지원 기록과 시간이 겹쳐 승인할 수 없습니다. 실제시간을 수정하거나 중복 기록을 반려해 주세요." : message.includes("WEEKLY_OVERTIME_LIMIT") ? "이 요청을 승인하면 같은 주의 시간외근무가 12시간을 넘습니다." : message.includes("ACTUAL_OVERTIME_REQUIRED") ? "실제 퇴근기록에서 인정 가능한 시간외근무가 아직 확인되지 않았습니다. 퇴근기록이 저장된 뒤 승인해 주세요." : message.includes("CLOCK_IN_CORRECTION_REQUIRED_FIRST") ? "해당 날짜의 출근 근태기록을 찾지 못해 퇴근시간을 승인할 수 없습니다. 출근기록을 먼저 등록하거나 데이터베이스 연결 보완 SQL을 적용해 주세요." : message.includes("COMP_TIME_BALANCE_INSUFFICIENT") ? "대체휴무 잔액이 부족해 승인할 수 없습니다. 적립내역을 확인하거나 예외 연장 후 다시 승인해 주세요." : message.includes("ANNUAL_LEAVE_BALANCE_INSUFFICIENT") ? "연차 잔액이 부족해 승인할 수 없습니다." : message.includes("ANNUAL_LEAVE_ENTITLEMENT_REQUIRED") ? "해당 기간의 연차 부여내역이 없습니다. 먼저 휴가 잔액 화면에서 연차를 등록해 주세요." : message.includes("MONTH_CLOSED") ? "마감된 달의 요청은 수정할 수 없습니다. 월 마감을 해제한 뒤 다시 처리해 주세요." : message.includes("ORGANIZATION_ACCESS_DENIED") ? "현재 기관에 속하지 않은 신청은 처리할 수 없습니다." : message.includes("ADMIN_REQUIRED") ? "기관관리자 권한을 데이터베이스에서 확인해 주세요. 보완 SQL 적용이 필요할 수 있습니다." : message.includes("REQUEST_NOT_REVIEWABLE") ? "이미 처리된 신청입니다. 먼저 재검토로 되돌린 뒤 처리해 주세요." : `요청을 처리하지 못했습니다${error.code ? ` (오류코드 ${error.code})` : ""}. 최신 데이터베이스 보완 SQL 적용 여부를 확인해 주세요.` }); return; }
       if (currentProfile) await loadRemoteData(currentProfile);
     } else {
       setRequests((previous) => previous.map((item) => item.id === request.id ? { ...item, status: decision, reviewer_comment: comment, reviewed_at: new Date().toISOString() } : item));
       setAuditLogs((previous) => [{ id: crypto.randomUUID(), attendance_record_id: request.attendance_record_id, employee_id: request.employee_id, employee_name: request.employee_name, action_type: "correction_review", changed_field: request.request_type, before_value: request.before_value, after_value: request.requested_value, reason: comment || request.reason, changed_by_name: currentProfile?.name, changed_by_role: effectiveRole, created_at: new Date().toISOString() }, ...previous]);
     }
-    setNotice({ tone: weeklyNotice ? "info" : "success", text: weeklyNotice || (decision === "approved" ? "요청을 승인했습니다." : decision === "rejected" ? "요청을 반려했습니다." : "추가정보를 요청했습니다.") });
+    setNotice({ tone: weeklyNotice ? "info" : "success", text: weeklyNotice || (decision === "approved" ? request.request_type === "overtime" ? `시간외근무 최대 ${formatMinutes(overtimeLimitMinutes)}, 대체휴무 최대 ${formatMinutes(compTimeLimitMinutes)}으로 사전 승인했습니다. 실제 인정시간은 퇴근할 때 확정됩니다.` : "요청을 승인했습니다." : decision === "rejected" ? "요청을 반려했습니다." : "추가정보를 요청했습니다.") });
   }
 
   async function reopenRequest(request: CorrectionRequest) {

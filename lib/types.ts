@@ -133,6 +133,9 @@ export interface CorrectionRequest {
   end_time?: string | null;
   calculated_minutes?: number;
   approved_minutes?: number;
+  overtime_approval_limit_minutes?: number;
+  comp_time_approval_limit_minutes?: number;
+  overtime_finalized_at?: string | null;
   request_subtype?: string;
   request_type: string;
   before_value: string;
