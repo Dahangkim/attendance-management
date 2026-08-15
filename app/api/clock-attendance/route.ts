@@ -4,7 +4,7 @@ import { resolveRequestIp } from "../_lib/client-ip";
 
 export const dynamic = "force-dynamic";
 
-const CLOCK_SERVER_VERSION = "2026-08-07-reclock-v3";
+const CLOCK_SERVER_VERSION = "2026-08-15-desktop-accuracy-v4";
 const json = (body: Record<string, unknown>, status: number) => Response.json(body, {
   status,
   headers: { "Cache-Control": "no-store", "X-Clock-Server-Version": CLOCK_SERVER_VERSION },
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   if (!action || !UUID_PATTERN.test(idempotencyKey) || note.length > 500
     || latitude !== null && (latitude < -90 || latitude > 90)
     || longitude !== null && (longitude < -180 || longitude > 180)
-    || accuracy !== null && (accuracy < 0 || accuracy > 100_000)) {
+    || accuracy !== null && (accuracy < 0 || accuracy > 40_000_000)) {
     return json({ ok: false, code: "INVALID_INPUT" }, 400);
   }
 

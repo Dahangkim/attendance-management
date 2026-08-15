@@ -143,6 +143,13 @@ test("desktop low-accuracy records use an explicit office-PC fallback", async ()
   assert.ok(geo.includes("사업장 안팎을 판정할 수 없습니다"));
 });
 
+test("desktop clock requests accept coarse network geolocation accuracy", async () => {
+  const route = await read("app/api/clock-attendance/route.ts");
+  assert.ok(route.includes("40_000_000"));
+  assert.ok(route.includes("desktop-accuracy-v4"));
+  assert.ok(!route.includes("accuracy > 100_000"));
+});
+
 test("all authenticated employees load the active workplace from Supabase", async () => {
   const app = await read("app/attendance-app.tsx");
   assert.ok(app.includes('const workplaceQuery = supabase.from("workplaces")'));
@@ -711,7 +718,7 @@ test("result attendance sheets omit raw location and leave request reasons", asy
   const app = await read("app/attendance-app.tsx");
   assert.ok(app.includes('const annualDetail = annualMinutes > 0 ? `${leaveUnitLabel(annualMinutes)} 사용` : ""'));
   assert.ok(app.includes('const specialLeaveDetail = specialLeaveMinutes > 0 ? `${specialLeave?.request_subtype || "특별휴가"} ${leaveDayLabel(specialLeaveMinutes)} 사용` : ""'));
-  assert.ok(app.includes('const otherLeaveDetail = otherLeaveMinutes > 0 ? `${otherLeave?.request_subtype || "기타 휴가"} ${leaveDayLabel(otherLeaveMinutes)} 사용` : ""'));
+  assert.ok(app.includes('const otherLeaveDetail = otherLeaveMinutes > 0 ? `${otherLeave?.request_subtype || "교육휴가"} ${leaveDayLabel(otherLeaveMinutes)} 사용` : ""'));
   assert.ok(app.includes('overtimeDetail, emergencyDetail, compDetail, annualDetail, specialLeaveDetail, otherLeaveDetail, sickDetail, tripDetail].filter(Boolean)'));
   assert.ok(!app.includes('annual?.reason ? `, 사유: ${annual.reason}`'));
   assert.ok(!app.includes('tripDetail, record?.note || ""'));

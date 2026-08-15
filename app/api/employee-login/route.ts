@@ -71,7 +71,7 @@ export async function POST(request: Request) {
   if (["org_admin", "admin", "super_admin"].includes(profile.role)) {
     try {
       const { error: loginLogError } = await adminClient.from("admin_login_logs").insert({
-        org_id: profile.org_id,
+        org_id: profile.role === "super_admin" ? null : profile.org_id,
         profile_id: profile.id,
         role: profile.role,
         ip_address: requestIpAddress(request),

@@ -807,3 +807,24 @@ test("administrator login history is GPS-free and separated by viewer role", asy
   assert.match(app, /관리자 로그인 이력/);
   assert.match(app, /본인의 로그인 시각, 접속 IP와 기기 정보만/);
 });
+
+test("employees can cancel pending overtime requests and education leave replaces new other-leave labels", async () => {
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  const sql = await readFile(new URL("supabase/repair_employee_overtime_request_cancel.sql", root), "utf8");
+  const install = await readFile(new URL("supabase/install_current.sql", root), "utf8");
+  for (const source of [sql, install]) {
+    assert.match(source, /employee_cancel_correction_request/);
+    assert.match(source, /REQUEST_NOT_CANCELLABLE/);
+    assert.match(source, /request_cancelled/);
+  }
+  assert.match(app, /신청 취소/);
+  assert.match(app, /교육휴가/);
+  assert.doesNotMatch(app, />기타 휴가</);
+});
+
+test("super administrator login history is stored and displayed without an institution", async () => {
+  const login = await readFile(new URL("app/api/employee-login/route.ts", root), "utf8");
+  const history = await readFile(new URL("app/api/admin-login-history/route.ts", root), "utf8");
+  assert.match(login, /profile\.role === "super_admin" \? null : profile\.org_id/);
+  assert.match(history, /item\.role === "super_admin" \? "최고관리자"/);
+});

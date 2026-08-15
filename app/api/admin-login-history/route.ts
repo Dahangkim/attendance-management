@@ -49,7 +49,7 @@ export async function GET(request: Request) {
     ...item,
     ip_address: actor.role === "super_admin" ? item.ip_address : maskIpAddress(item.ip_address),
     profile_name: profileNames.get(item.profile_id) || "관리자",
-    organization_name: item.org_id ? organizationNames.get(item.org_id) || "기관 미확인" : "최고관리자",
+    organization_name: item.role === "super_admin" ? "최고관리자" : item.org_id ? organizationNames.get(item.org_id) || "기관 미확인" : "기관 미확인",
   }));
   return json({ ok: true, logs });
 }
