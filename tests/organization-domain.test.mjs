@@ -835,6 +835,22 @@ test("overtime requests store advance overtime and comp-time limits and finalize
   assert.match(app, /실제 인정시간은 퇴근할 때 확정됩니다/);
 });
 
+test("attendance review keeps confirmed clock-in evidence and records detailed audit items", async () => {
+  const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
+  const sql = await readFile(new URL("supabase/repair_detailed_attendance_review_history.sql", root), "utf8");
+  const manual = await readFile(new URL("docs/ATTENDANCE_CHANGE_MANUAL.md", root), "utf8");
+  assert.match(sql, /clock_in_reviewed_at/);
+  assert.match(sql, /clock_out_reviewed_at/);
+  assert.match(sql, /work_time_reviewed_at/);
+  assert.match(sql, /confirmed_items/);
+  assert.match(sql, /old\.clock_out_at is distinct from new\.clock_out_at/);
+  assert.match(app, /직출 사유/);
+  assert.match(app, /퇴근기록 누락/);
+  assert.match(app, /attendanceReviewReasons/);
+  assert.match(manual, /변경이력/);
+  assert.match(manual, /운영 DB/);
+});
+
 test("super administrator login history is stored and displayed without an institution", async () => {
   const login = await readFile(new URL("app/api/employee-login/route.ts", root), "utf8");
   const history = await readFile(new URL("app/api/admin-login-history/route.ts", root), "utf8");

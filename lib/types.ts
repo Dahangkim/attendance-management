@@ -73,6 +73,9 @@ export interface AttendanceRecord {
   leave_type?: "none" | "annual_leave" | "half_day" | "quarter_day" | "hourly_leave" | "sick_leave";
   is_closed: boolean;
   changed?: boolean;
+  clock_in_reviewed_at?: string | null;
+  clock_out_reviewed_at?: string | null;
+  work_time_reviewed_at?: string | null;
 }
 
 export interface CompTimeBalance {

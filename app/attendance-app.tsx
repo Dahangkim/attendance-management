@@ -165,6 +165,16 @@ const attendanceNeedsAttention = (record: AttendanceRecord, requests: Correction
   if (!record.clock_in_at && (approvedLeaveForRecord(record, requests) || approvedEmergencyMinutesForRecord(record, requests) > 0 || [0, 6].includes(new Date(`${record.work_date}T12:00:00+09:00`).getDay()))) return false;
   return ["late", "missing_in", "missing_out", "admin_review", "location_review"].includes(record.attendance_status);
 };
+const attendanceReviewReasons = (record: AttendanceRecord) => {
+  const reasons: string[] = [];
+  if (!record.clock_in_at || record.attendance_status === "missing_in") reasons.push("출근기록 누락");
+  if (record.clock_in_at && !record.clock_out_at && record.attendance_status === "missing_out") reasons.push("퇴근기록 누락");
+  if (record.clock_in_at && ["outside", "low_accuracy", "permission_denied", "unavailable"].includes(record.clock_in_location_status) && !record.clock_in_ip_matched && !record.clock_in_reviewed_at) reasons.push(record.clock_in_location_status === "outside" ? "직출 사유" : "출근 위치 정확도");
+  if (record.clock_out_at && ["outside", "low_accuracy", "permission_denied", "unavailable"].includes(record.clock_out_location_status) && !record.clock_out_ip_matched && !record.clock_out_reviewed_at) reasons.push(record.clock_out_location_status === "outside" ? "직퇴 사유" : "퇴근 위치 정확도");
+  if (record.attendance_status === "late" && !record.work_time_reviewed_at) reasons.push("지각 사유");
+  if (record.attendance_status === "admin_review" && reasons.length === 0 && !record.work_time_reviewed_at) reasons.push("근무시간 부족 또는 근태 사유");
+  return reasons;
+};
 const readableTextColor = (hex: string) => {
   const normalized = /^#[0-9a-f]{6}$/i.test(hex) ? hex.slice(1) : "173f35";
   const channels = [0, 2, 4].map((index) => Number.parseInt(normalized.slice(index, index + 2), 16) / 255).map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
@@ -359,6 +369,7 @@ const statusTone = (status: string) => {
 const AUDIT_FIELD_LABEL: Record<string, string> = {
   approved_overtime_minutes: "시간외근무 승인시간",
   attendance_status: "근태상태",
+  attendance_review: "관리자 확인 항목",
   attendance_record: "출퇴근기록",
   attendance_request: "근태 신청내용",
   request_status: "요청 처리상태",
@@ -437,7 +448,8 @@ const auditFieldLabel = (field: string) => AUDIT_FIELD_LABEL[field] || REQUEST_T
 const readableAuditValue = (value: string) => {
   if (!value) return "없음";
   try {
-    const parsed = JSON.parse(value) as { status?: string; minutes?: number; comp_time_eligible_minutes?: number };
+    const parsed = JSON.parse(value) as { status?: string; minutes?: number; comp_time_eligible_minutes?: number; confirmed_items?: string[] };
+    if (parsed.confirmed_items?.length) return `${parsed.confirmed_items.join(", ")} 확인 완료`;
     if (parsed.status === "approved") return `승인 ${formatMinutes(parsed.minutes || 0)}${parsed.comp_time_eligible_minutes ? `, 대체휴무 전환 가능 ${formatMinutes(parsed.comp_time_eligible_minutes)}` : ""}`;
     if (parsed.status === "rejected") return "반려";
   } catch { return value; }
@@ -453,7 +465,7 @@ const auditDescription = (log: AuditLog) => {
   if (log.action_type === "request_reopened") return "처리된 요청을 다시 검토 대기 상태로 변경했습니다.";
   if (log.action_type === "request_edited") return "근태 신청내용을 수정하고 다시 검토 대기로 변경했습니다.";
   if (log.action_type === "request_resubmitted") return "직원이 신청 내용을 수정해 다시 제출했습니다.";
-  if (log.action_type === "admin_review_completed") return "관리자 확인 필요 기록을 확인 완료했습니다.";
+  if (log.action_type === "admin_review_completed") return `${readableAuditValue(log.after_value)}했습니다. 관리자 의견: ${log.reason || "없음"}`;
   if (log.action_type === "admin_restore") return "삭제된 근태기록을 복원했습니다.";
   if (log.action_type === "report_viewer_changed") return `부관리자 조회 권한을 ${log.after_value === "true" ? "부여했습니다." : "해제했습니다."}`;
   if (log.action_type === "employee_created") return "새 직원 계정을 만들었습니다.";
@@ -1677,7 +1689,8 @@ export default function AttendanceApp() {
   }
 
   async function confirmAttendanceRecord(record: AttendanceRecord) {
-    const comment = window.prompt("확인한 내용이나 사유를 입력해 주세요. 예: 사무실 IP 일치 확인, 외부 출근 사유 확인") || "";
+    const reviewItems = attendanceReviewReasons(record);
+    const comment = window.prompt(`확인 항목: ${reviewItems.join(", ") || "근태 사유"}\n\n확인한 내용이나 사유를 입력해 주세요. 예: 외부 출근 일정 확인, 위치 오차 확인`) || "";
     if (comment.trim().length < 2) return;
     if (supabase) {
       const { error } = await supabase.rpc("admin_confirm_attendance_record", { p_record_id: record.id, p_comment: comment });
@@ -3061,7 +3074,7 @@ function MonthlyAdmin({ records, summaryRecords, requests, exceptions, holidays,
   records = [...records].sort((left, right) => (recordOrder === "latest" ? right.work_date.localeCompare(left.work_date) : left.work_date.localeCompare(right.work_date)) || (left.employee_name || "").localeCompare(right.employee_name || "", "ko-KR"));
   const isClosed = closing?.status === "closed";
   const employees = profiles.filter((profile) => profile.role === "employee" && (employeeFilter === "all" || profile.id === employeeFilter));
-  const reviewableRecords = records.filter((record) => ["admin_review", "location_review", "field", "education"].includes(record.attendance_status));
+  const reviewableRecords = records.filter((record) => attendanceNeedsAttention(record, requests));
   const monthStartDate = `${month}-01`;
   const monthAfterDateValue = new Date(`${monthStartDate}T12:00:00+09:00`); monthAfterDateValue.setMonth(monthAfterDateValue.getMonth() + 1);
   const monthAfterDate = KST_DATE.format(monthAfterDateValue);
@@ -3072,7 +3085,7 @@ function MonthlyAdmin({ records, summaryRecords, requests, exceptions, holidays,
     <div className="page-heading"><div><span className="kicker">월별 관리</span><h1>직원 근태현황</h1><p>출퇴근 시각과 출근장소, 퇴근장소를 확인하고 월 마감 전에 실제 시각을 수정하거나 누락된 근무를 추가할 수 있습니다.</p></div><div className="heading-actions"><button className="primary-button compact" onClick={onCreate} disabled={isClosed}><Clock3 /> 근무기록 추가</button>{isClosed ? canReopen ? <button className="secondary-button reopen-button" onClick={onReopen}><RefreshCw /> 월 마감 해제</button> : <Badge tone="warning">마감됨</Badge> : <button className="secondary-button" onClick={onClose}><Check /> 월 마감</button>}<div className="export-menu"><button className="primary-button compact"><Download /> 내보내기</button><div><button onClick={onCsv}>CSV</button><button onClick={onExcel}>엑셀</button><button onClick={onPrint}>인쇄, PDF</button></div></div></div></div>
     <div className={`month-closing-state ${isClosed ? "closed" : "open"}`}><ShieldCheck /><div><strong>{isClosed ? `${formatMonth(month)} 마감 완료` : `${formatMonth(month)} 확인 중`}</strong><p>{isClosed ? "이 달은 확정되어 일반 수정, 삭제, 근태 신청 승인이 제한됩니다. 최고관리자는 사유를 남기고 다시 열 수 있습니다." : "기록과 근태 신청을 모두 확인한 뒤 월 마감을 하면 이 달의 자료가 확정됩니다."}</p></div></div>
     <div className="toolbar-card filters"><MonthPicker value={month} onChange={(value) => { setRecordRange("month"); onMonth(value); }} /><div className="quick-range-tabs" aria-label="근태기록 조회 기간">{(["today", "week", "month"] as const).map((range) => <button type="button" key={range} className={recordRange === range ? "active" : ""} onClick={() => { setRecordRange(range); if (range !== "month") onMonth(today.slice(0, 7)); }}>{range === "today" ? "오늘" : range === "week" ? "이번 주" : "이번 달"}</button>)}</div><label><span>직원</span><select value={employeeFilter} onChange={(e) => onEmployee(e.target.value)}><option value="all">전체 직원</option>{profiles.filter((p) => p.role === "employee").map((p) => <option value={p.id} key={p.id}>{p.name}</option>)}</select></label><label><span>상태</span><select value={statusFilter} onChange={(e) => onStatus(e.target.value)}><option value="all">전체 상태</option>{ATTENDANCE_STATUS_FILTERS.map((value) => <option value={value} key={value}>{STATUS_LABEL[value]}</option>)}</select></label></div>
-    {reviewableRecords.length > 0 && <div className="admin-review-panel"><div><strong>관리자 확인 필요 {reviewableRecords.length}건</strong><p>위치나 근무시간을 확인한 뒤 처리하세요. 확인 내용과 처리시각은 변경 이력에 남습니다.</p></div><div>{reviewableRecords.map((record) => <button key={record.id} type="button" onClick={() => onConfirm(record)} disabled={isClosed}><Check size={15} /> {record.work_date} {record.employee_name} 확인 완료</button>)}</div></div>}
+    {reviewableRecords.length > 0 && <div className="admin-review-panel"><div><strong>관리자 확인 필요 {reviewableRecords.length}건</strong><p>각 기록에 표시된 항목을 확인하세요. 확인 항목, 관리자 의견과 처리시각은 변경 이력에 남습니다.</p></div><div>{reviewableRecords.map((record) => { const reasons = attendanceReviewReasons(record); const needsTimeEdit = reasons.some((reason) => reason.includes("누락")); return <button key={record.id} type="button" onClick={() => needsTimeEdit ? onEdit(record) : onConfirm(record)} disabled={isClosed}>{needsTimeEdit ? <PencilLine size={15} /> : <Check size={15} />} {record.work_date} {record.employee_name} · {reasons.join(", ") || "근태 사유 확인"}</button>; })}</div></div>}
     <div className="table-card monthly-summary"><div className="table-scroll"><table><thead><tr><th>직원</th><th>사무실 근무일</th><th>총 근무일</th><th>휴가 사용</th><th>승인 시간외</th><th>이 달 발생분 대휴 사용</th><th>대휴 제외 시간외</th><th>이 달 대휴 사용</th><th>출장</th><th>특별휴가</th><th>병가</th></tr></thead><tbody>{employees.map((person) => { const personRows = summaryRecords.filter((record) => record.employee_id === person.id); const overtimeNet = overtimeAfterComp.find((item) => item.employee_id === person.id); const officeDays = personRows.filter((record) => record.clock_in_at && (record.clock_in_location_status === "inside" || record.clock_in_ip_matched)).length; const tripDates = new Set(personRows.filter((record) => record.work_type === "business_trip" || record.attendance_status === "business_trip").map((record) => record.work_date)); const attendanceDates = new Set(personRows.filter((record) => record.clock_in_at || tripDates.has(record.work_date)).map((record) => record.work_date)); return <tr key={person.id}><td><strong>{person.name}</strong></td><td>{officeDays}일</td><td>{attendanceDates.size}일</td><td>{leaveDays(requests, person.id, month, "annual_leave")}일</td><td>{formatMinutes(personRows.reduce((sum, record) => sum + (record.approved_overtime_minutes || 0), 0) + approvedEmergencyMinutesForEmployeeMonth(requests, person.id, month))}</td><td>{formatMinutes(overtimeNet?.comp_time_used_from_source_minutes || 0)}</td><td><strong>{formatMinutes(overtimeNet?.overtime_after_comp_minutes || 0)}</strong></td><td>{formatMinutes(compTimeMinutes(requests, person.id, month))}</td><td>{tripDates.size}일</td><td>{leaveDays(requests, person.id, month, "special_leave")}일</td><td>{leaveDays(requests, person.id, month, "sick_leave")}일</td></tr>; })}</tbody></table></div></div>
     {approvedLeaveRequests.length > 0 && <div className={`approved-leave-panel ${showApprovedLeaves ? "expanded" : "collapsed"}`}><button type="button" className="approved-leave-toggle" onClick={() => setShowApprovedLeaves((current) => !current)} aria-expanded={showApprovedLeaves}><span><strong>승인된 휴가와 대체휴무</strong><small>총 {approvedLeaveRequests.length}건 · 근태기록에는 날짜별로 계속 표시됩니다.</small></span>{showApprovedLeaves ? <ChevronLeft className="collapse-up" /> : <ChevronRight />}</button>{showApprovedLeaves && <div>{approvedLeaveRequests.map((request) => <span key={request.id}><b>{request.employee_name}</b> {request.request_type === "other_leave" ? request.request_subtype || "교육휴가" : REQUEST_TYPE_LABEL[request.request_type]} {requestPeriodLabel(request)}, {requestValueLabel(request)}</span>)}</div>}</div>}
     {standaloneEmergencyRequests.length > 0 && <div className="approved-leave-panel standalone-emergency-panel"><strong>출퇴근 기록 없는 긴급지원 근무</strong><div>{standaloneEmergencyRequests.map((request) => <span key={request.id}><b>{request.employee_name}</b> {requestPeriodLabel(request)}, 승인 {formatMinutes(request.approved_minutes || request.calculated_minutes || 0)}</span>)}</div></div>}
