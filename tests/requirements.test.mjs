@@ -585,7 +585,7 @@ test("admins can batch-create attendance and exception schedules including exter
   assert.ok(types.includes('"external_training"'));
 });
 
-test("overtime approval uses actual clock records and approved mid-day leave is excluded", async () => {
+test("overtime preapproval shows its limit before actual clock-out and approved mid-day leave is excluded", async () => {
   const app = await read("app/attendance-app.tsx");
   const sql = await read("supabase/upgrade_batch_training_actual_overtime.sql");
   for (const text of [
@@ -598,7 +598,7 @@ test("overtime approval uses actual clock records and approved mid-day leave is 
     "time '12:00'",
     "time '13:00'",
   ]) assert.ok(sql.includes(text));
-  for (const text of ["실제 인정 가능", "최대 승인", "퇴근기록 대기", "반려", "재검토"]) assert.ok(app.includes(text));
+  for (const text of ["사전 승인 가능", "실제 인정", "퇴근할 때 확정", "반려", "재검토"]) assert.ok(app.includes(text));
 });
 
 test("manual overtime approval is not overwritten by the requested maximum", async () => {
@@ -683,7 +683,7 @@ test("overtime uses eight actual work hours and rounds an exceeded half-hour upw
 test("attendance applications are separated from clock correction requests", async () => {
   const app = await read("app/attendance-app.tsx");
   const css = await read("app/globals.css");
-  for (const text of ["근태 신청 관리", "근태 신청 검토", "근태 신청 대기", "출퇴근 수정", "휴가와 대체휴무", "출장과 예외근무", "시간외근무", "퇴근기록 대기", "승인 대기", "새 근태 신청"]) assert.ok(app.includes(text));
+  for (const text of ["근태 신청 관리", "근태 신청 검토", "근태 신청 대기", "출퇴근 수정", "휴가와 대체휴무", "출장과 예외근무", "시간외근무", "사전 승인 대기", "승인 대기", "새 근태 신청"]) assert.ok(app.includes(text));
   assert.ok(!app.includes("수정 요청 대기"));
   assert.ok(!app.includes("수정 요청 검토"));
   assert.ok(app.includes('request.request_type === "overtime") return formatMinutes(minutes)'));

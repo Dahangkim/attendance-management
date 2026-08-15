@@ -833,6 +833,9 @@ test("overtime requests store advance overtime and comp-time limits and finalize
   }
   assert.match(app, /review_overtime_request_in_advance/);
   assert.match(app, /실제 인정시간은 퇴근할 때 확정됩니다/);
+  assert.match(app, /사전 승인 대기/);
+  assert.match(app, /퇴근할 때 확정/);
+  assert.doesNotMatch(app, /request\.request_type === "overtime" && overtimeLimit <= 0/);
 });
 
 test("attendance review keeps confirmed clock-in evidence and records detailed audit items", async () => {
