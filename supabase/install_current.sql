@@ -6997,11 +6997,14 @@ begin
     changed=true,updated_at=now() where id=v_record.id;
 
   if v_comp > 0 then
-    insert into public.comp_time_credits(attendance_record_id,employee_id,granted_minutes,
-      remaining_minutes,expires_on,granted_by,reason)
-    values(v_record.id,v_request.employee_id,v_comp,v_comp,v_record.work_date+30,
+    insert into public.comp_time_credits(org_id,attendance_record_id,employee_id,source_type,source_date,
+      granted_minutes,remaining_minutes,expires_on,granted_by,reason)
+    values(v_request.org_id,v_record.id,v_request.employee_id,'overtime',v_record.work_date,
+      v_comp,v_comp,v_record.work_date+30,
       v_request.reviewer_id,coalesce(nullif(trim(v_request.reviewer_comment),''),v_request.reason))
     on conflict(attendance_record_id) do update set
+      org_id=excluded.org_id,employee_id=excluded.employee_id,
+      source_type=excluded.source_type,source_date=excluded.source_date,
       granted_minutes=excluded.granted_minutes,
       remaining_minutes=greatest(0,excluded.granted_minutes-(public.comp_time_credits.granted_minutes-public.comp_time_credits.remaining_minutes)),
       expires_on=excluded.expires_on,granted_by=excluded.granted_by,granted_at=now(),reason=excluded.reason;

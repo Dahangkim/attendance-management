@@ -825,12 +825,15 @@ test("employees can cancel pending overtime requests and education leave replace
 test("overtime requests store advance overtime and comp-time limits and finalize at clock-out", async () => {
   const app = await readFile(new URL("app/attendance-app.tsx", root), "utf8");
   const sql = await readFile(new URL("supabase/repair_overtime_preapproval_limits.sql", root), "utf8");
-  for (const source of [sql]) {
+  const sourceDateRepair = await readFile(new URL("supabase/repair_overtime_comp_time_source_date.sql", root), "utf8");
+  for (const source of [sql, sourceDateRepair]) {
     assert.match(source, /overtime_approval_limit_minutes/);
     assert.match(source, /comp_time_approval_limit_minutes/);
-    assert.match(source, /finalize_preapproved_overtime_after_clock_out/);
     assert.match(source, /least\(coalesce\(v_record\.recorded_overtime_minutes,0\),v_request\.overtime_approval_limit_minutes\)/);
+    assert.match(source, /org_id,attendance_record_id,employee_id,source_type,source_date/);
+    assert.match(source, /'overtime',v_record\.work_date/);
   }
+  assert.match(sql, /finalize_preapproved_overtime_after_clock_out/);
   assert.match(app, /review_overtime_request_in_advance/);
   assert.match(app, /실제 인정시간은 퇴근할 때 확정됩니다/);
   assert.match(app, /사전 승인 대기/);
